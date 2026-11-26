@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workshop Maintenance • Repair Estimation, Cost Consolidation & Presets</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #printable-approval-sheet, #printable-approval-sheet * { visibility: visible; }
+      #printable-approval-sheet {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white !important;
+        color: black !important;
+        padding: 20px;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+  <div id="boot-error" class="hidden max-w-2xl mx-auto mt-10 p-4 bg-rose-950 border border-rose-700 text-rose-200 rounded-xl text-sm font-mono"></div>
+  <div id="root"></div>
+
+  <script>
+    window.onerror = function (msg, url, line) {
+      const box = document.getElementById('boot-error');
+      if (box) {
+        box.classList.remove('hidden');
+        box.textContent = 'Startup Error: ' + msg + ' (Line ' + line + ')';
+      }
+    };
+
+    (function () {
+      if (!window.React || !window.ReactDOM || !window.XLSX) {
+        const box = document.getElementById('boot-error');
+        if (box) {
+          box.classList.remove('hidden');
+          box.textContent = 'Required libraries failed to load. Check internet connection.';
+        }
+        return;
+      }
+
+      const { useState, useEffect, useMemo, createElement: h } = React;
+
+      // ==========================================
+      // 1. IndexedDB Persistence Layer (Survives Reloads)
+      // ==========================================
+      const DB_NAME = 'KellerUnifiedRepairDB_v3';
+      const STORE_NAME = 'workspace';
+
+      function openDB() {
+        return new Promise((resolve, reject) => {
+          try {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+              }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+
+      async function dbSet(key, val) {
+        try {
+          const db = await openDB();
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).put(val, key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (_) {}
+      }
+
+      async function dbGet(key) {
+        try {
+          const db = await openDB();
+          return await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).get(key);
+            req.onsuccess = () => resolve(req.result ?? null);
+            req.onerror = () => reject(req.error);
+          });
+        } catch (_) {
+          return null;
+        }
+      }
+
+      async function dbClear() {
+        try {
+          const db = await openDB();
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (_) {}
+      }
+
+      // ==========================================
+      // 2. Maintenance Categories & Machine Presets (C6, Hutte, XCMG)
+      // ==========================================
+      const CATEGORIES = [
+        'Preventive Maintenance',
+        'Corrective Maintenance',
+        'Property Damage',
+        'Modification'
+      ];
+
+      const DEFAULT_CATALOG = {
+        C6: {
+          parts: [
+            { id: 'c6-1', name: 'Sliding Bearing (Mast Assembly)', code: 'C6-SLB-01', category: 'Preventive Maintenance', defaultQty: 4, unitPrice: 70.00 },
+            { id: 'c6-2', name: 'Mast Chain (SLH Heavy Duty)', code: 'C6-MCH-02', category: 'Preventive Maintenance', defaultQty: 2, unitPrice: 350.00 },
+            { id: 'c6-3', name: 'Hydraulic Oil Seal Kit (TE 70x90x10)', code: 'C6-SLK-03', category: 'Preventive Maintenance', defaultQty: 2, unitPrice: 38.00 },
+            { id: 'c6-4', name: 'Return Filter & O-Ring Service Set', code: 'C6-FLT-04', category: 'Preventive Maintenance', defaultQty: 1, unitPrice: 145.00 },
+            { id: 'c6-5', name: 'Rotary Head Bearing & Octagon Shaft', code: 'C6-ROT-05', category: 'Corrective Maintenance', defaultQty: 1, unitPrice: 1850.00 },
+            { id: 'c6-6', name: 'Wire Rope Winch Cable (26mm)', code: 'C6-WRP-06', category: 'Corrective Maintenance', defaultQty: 2, unitPrice: 480.00 },
+            { id: 'c6-7', name: 'T20 EP Rotary Compression Spring', code: 'C6-SPR-07', category: 'Corrective Maintenance', defaultQty: 4, unitPrice: 95.00 },
+            { id: 'c6-8', name: 'Remote Control Transmitter Housing', code: 'C6-RMT-08', category: 'Property Damage', defaultQty: 1, unitPrice: 752.00 },
+            { id: 'c6-9', name: 'Hydraulic Hose Guard & Clamp Bracket', code: 'C6-HGD-09', category: 'Property Damage', defaultQty: 3, unitPrice: 120.00 },
+            { id: 'c6-10', name: 'Preventer Jaw Clamp (Hardened 4140)', code: 'C6-PRV-10', category: 'Modification', defaultQty: 2, unitPrice: 410.00 },
+            { id: 'c6-11', name: 'Auxiliary Sensor Wiring Harness Mod', code: 'C6-MOD-11', category: 'Modification', defaultQty: 1, unitPrice: 320.00 }
+          ],
+          presets: [
+            { code: 'C6 P1', title: 'Standard Mast & Seal Service', category: 'Preventive Maintenance', partIds: ['c6-1', 'c6-2', 'c6-3', 'c6-4'] },
+            { code: 'C6 P2', title: 'Rotary & Winch Overhaul', category: 'Corrective Maintenance', partIds: ['c6-5', 'c6-6', 'c6-7', 'c6-1'] },
+            { code: 'C6 P3', title: 'Full Yard Re-Mobilisation Package', category: 'Modification', partIds: ['c6-1', 'c6-2', 'c6-3', 'c6-5', 'c6-6', 'c6-10', 'c6-11'] }
+          ]
+        },
+        Hutte: {
+          parts: [
+            { id: 'hut-1', name: 'Hutte Feed Cylinder Seal Kit', code: 'HUT-FCY-01', category: 'Preventive Maintenance', defaultQty: 2, unitPrice: 165.00 },
+            { id: 'hut-2', name: 'Mast Guide Wear Pad Set (UHMWPE)', code: 'HUT-WPD-02', category: 'Preventive Maintenance', defaultQty: 6, unitPrice: 85.00 },
+            { id: 'hut-3', name: 'Hydraulic Pilot Filter Element', code: 'HUT-FLT-03', category: 'Preventive Maintenance', defaultQty: 2, unitPrice: 110.00 },
+            { id: 'hut-4', name: 'Auto-Greasing Cartridge & Line Fittings', code: 'HUT-GRS-04', category: 'Preventive Maintenance', defaultQty: 4, unitPrice: 45.00 },
+            { id: 'hut-5', name: 'Hutte Rod Manipulator Gripper Jaw', code: 'HUT-MNP-05', category: 'Corrective Maintenance', defaultQty: 2, unitPrice: 400.00 },
+            { id: 'hut-6', name: 'Double Clamp Holder Cylinder & Pin', code: 'HUT-CLP-06', category: 'Corrective Maintenance', defaultQty: 1, unitPrice: 1250.00 },
+            { id: 'hut-7', name: 'Drifter Rotary Gearbox Bearing Set', code: 'HUT-GBX-07', category: 'Corrective Maintenance', defaultQty: 1, unitPrice: 1680.00 },
+            { id: 'hut-8', name: 'Control Console Joystick & Boot Replacement', code: 'HUT-JOY-08', category: 'Property Damage', defaultQty: 1, unitPrice: 640.00 },
+            { id: 'hut-9', name: 'Side Canopy Cover & Latch Assembly', code: 'HUT-CNP-09', category: 'Property Damage', defaultQty: 1, unitPrice: 520.00 },
+            { id: 'hut-10', name: 'M5 Datalogger Pressure Transducer Kit', code: 'HUT-M5T-10', category: 'Modification', defaultQty: 2, unitPrice: 390.00 },
+            { id: 'hut-11', name: 'Aux Hydraulic Diverter Valve Retrofit', code: 'HUT-VLV-11', category: 'Modification', defaultQty: 1, unitPrice: 880.00 }
+          ],
+          presets: [
+            { code: 'Hutte P1', title: 'Mast & Hydraulic Service Kit', category: 'Preventive Maintenance', partIds: ['hut-1', 'hut-2', 'hut-3', 'hut-4'] },
+            { code: 'Hutte P2', title: 'Rod Manipulator & Clamp Overhaul', category: 'Corrective Maintenance', partIds: ['hut-5', 'hut-6', 'hut-7', 'hut-2'] },
+            { code: 'Hutte P3', title: 'Datalogger & Valve Retrofit', category: 'Modification', partIds: ['hut-10', 'hut-11', 'hut-3'] }
+          ]
+        },
+        XCMG: {
+          parts: [
+            { id: 'xcmg-1', name: 'XCMG Kelly Bar Shock Absorber Spring', code: 'XCM-KLY-01', category: 'Preventive Maintenance', defaultQty: 4, unitPrice: 190.00 },
+            { id: 'xcmg-2', name: 'Main Winch Wire Rope (32mm Non-Rotating)', code: 'XCM-WNC-02', category: 'Preventive Maintenance', defaultQty: 1, unitPrice: 1450.00 },
+            { id: 'xcmg-3', name: 'Rotary Drive Oil Cooler & Filter Pack', code: 'XCM-COL-03', category: 'Preventive Maintenance', defaultQty: 1, unitPrice: 420.00 },
+            { id: 'xcmg-4', name: 'Track Roller & Idler Seal Assembly', code: 'XCM-TRK-04', category: 'Preventive Maintenance', defaultQty: 4, unitPrice: 135.00 },
+            { id: 'xcmg-5', name: 'Crowd Cylinder Piston & Seal Overhaul', code: 'XCM-CRD-05', category: 'Corrective Maintenance', defaultQty: 1, unitPrice: 1920.00 },
+            { id: 'xcmg-6', name: 'Rotary Drive Planet Gear & Bearing Set', code: 'XCM-PLT-06', category: 'Corrective Maintenance', defaultQty: 1, unitPrice: 2450.00 },
+            { id: 'xcmg-7', name: 'Depth Encoder & Proximity Sensor Module', code: 'XCM-ENC-07', category: 'Corrective Maintenance', defaultQty: 1, unitPrice: 680.00 },
+            { id: 'xcmg-8', name: 'Cab Tempered Glass & Wiper Motor Kit', code: 'XCM-CAB-08', category: 'Property Damage', defaultQty: 1, unitPrice: 790.00 },
+            { id: 'xcmg-9', name: 'Rear Counterweight Guard Rail Repair', code: 'XCM-GRD-09', category: 'Property Damage', defaultQty: 1, unitPrice: 550.00 },
+            { id: 'xcmg-10', name: 'Casing Oscillator Hydraulic Coupler Mod', code: 'XCM-OSC-10', category: 'Modification', defaultQty: 2, unitPrice: 460.00 },
+            { id: 'xcmg-11', name: 'External Emergency Stop & Beacon Wiring', code: 'XCM-EST-11', category: 'Modification', defaultQty: 1, unitPrice: 310.00 }
+          ],
+          presets: [
+            { code: 'XCMG P1', title: 'Preventive Undercarriage & Kelly Service', category: 'Preventive Maintenance', partIds: ['xcmg-1', 'xcmg-2', 'xcmg-3', 'xcmg-4'] },
+            { code: 'XCMG P2', title: 'Rotary Drive & Crowd Cylinder Rebuild', category: 'Corrective Maintenance', partIds: ['xcmg-5', 'xcmg-6', 'xcmg-7', 'xcmg-1', 'xcmg-3'] },
+            { code: 'XCMG P3', title: 'Safety Beacon & Oscillator Mod', category: 'Modification', partIds: ['xcmg-10', 'xcmg-11', 'xcmg-7'] }
+          ]
+        }
+      };
+
+      function classifyCategory(text) {
+        const t = String(text || '').toLowerCase();
+        if (/mod|retrofit|upgrade|convert|fabrication/.test(t)) return 'Modification';
+        if (/damage|broken|bent|crack|leakage|collision/.test(t)) return 'Property Damage';
+        if (/service|maintenance|seal|filter|oil|bearing|chain|grease/.test(t)) return 'Preventive Maintenance';
+        return 'Corrective Maintenance';
+      }
+
+      // ==========================================
+      // 3. Main Unified Application
+      // ==========================================
+      function App() {
+        const [isHydrated, setIsHydrated] = useState(false);
+        const [activeTab, setActiveTab] = useState('ESTIMATOR'); // 'ESTIMATOR' | 'CONSOLIDATION'
+
+        // --- Previous Consolidation & Audit States ---
+        const [partsData, setPartsData] = useState([]);
+        const [uploadedFiles, setUploadedFiles] = useState([]);
+        const [auditReports, setAuditReports] = useState([]);
+        const [searchQuery, setSearchQuery] = useState('');
+        const [ledgerViewMode, setLedgerViewMode] = useState('SUMMARY'); // 'SUMMARY' | 'PARTS'
+        const [selectedProductFilter, setSelectedProductFilter] = useState('ALL');
+
+        // --- New Machine Dropdown, Presets & Category Builder States ---
+        const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
+        const [selectedMachine, setSelectedMachine] = useState('C6');
+        const [activeCategory, setActiveCategory] = useState('ALL');
+        const [estNumber, setEstNumber] = useState('EST-2026-001');
+        const [savedEstimations, setSavedEstimations] = useState([]);
+        const [estRows, setEstRows] = useState([
+          { rowId: 1, partId: 'c6-1', customPartName: '', category: 'Preventive Maintenance', qty: 4, unitPrice: 70.00 },
+          { rowId: 2, partId: 'c6-2', customPartName: '', category: 'Preventive Maintenance', qty: 2, unitPrice: 350.00 },
+          { rowId: 3, partId: '', customPartName: '', category: 'Corrective Maintenance', qty: 1, unitPrice: 0 }
+        ]);
+        const [newPresetCode, setNewPresetCode] = useState('');
+        const [newPresetCategory, setNewPresetCategory] = useState('Preventive Maintenance');
+        const [toast, setToast] = useState('');
+
+        const triggerToast = (msg) => {
+          setToast(msg);
+          setTimeout(() => setToast(''), 3500);
+        };
+
+        // Hydrate everything from IndexedDB on load/refresh
+        useEffect(() => {
+          (async () => {
+            try {
+              const saved = await dbGet('unified_state_v3');
+              if (saved) {
+                if (Array.isArray(saved.partsData)) setPartsData(saved.partsData);
+                if (Array.isArray(saved.uploadedFiles)) setUploadedFiles(saved.uploadedFiles);
+                if (Array.isArray(saved.auditReports)) setAuditReports(saved.auditReports);
+                if (saved.catalog) setCatalog({ ...DEFAULT_CATALOG, ...saved.catalog });
+                if (saved.selectedMachine) setSelectedMachine(saved.selectedMachine);
+                if (saved.estNumber) setEstNumber(saved.estNumber);
+                if (Array.isArray(saved.estRows)) setEstRows(saved.estRows);
+                if (Array.isArray(saved.savedEstimations)) setSavedEstimations(saved.savedEstimations);
+              }
+            } catch (err) {
+              console.error('Hydration error:', err);
+            } finally {
+              setIsHydrated(true);
+            }
+          })();
+        }, []);
+
+        // Persist everything automatically on change
+        useEffect(() => {
+          if (!isHydrated) return;
+          dbSet('unified_state_v3', {
+            partsData,
+            uploadedFiles,
+            auditReports,
+            catalog,
+            selectedMachine,
+            estNumber,
+            estRows,
+            savedEstimations,
+            updatedAt: new Date().toISOString()
+          });
+        }, [isHydrated, partsData, uploadedFiles, auditReports, catalog, selectedMachine, estNumber, estRows, savedEstimations]);
+
+        const parseMoney = (cell) => {
+          if (!cell) return null;
+          if (typeof cell.v === 'number' && !isNaN(cell.v)) {
+            return { val: cell.v };
+          }
+          const rawStr = String(cell.w || cell.v || '').trim();
+          if (!rawStr || rawStr === '-' || rawStr === '$-') return null;
+          const cleaned = rawStr.replace(/[^0-9.-]+/g, '');
+          const num = parseFloat(cleaned);
+          return !isNaN(num) ? { val: num } : null;
+        };
+
+        // ==========================================
+        // Unified Excel Upload: Consolidates Trackers AND Populates Machine Dropdown/Presets
+        // ==========================================
+        const handleMultiExcelUpload = async (e) => {
+          const files = Array.from(e.target.files || []);
+          if (!files.length) return;
+
+          let newParts = [...partsData];
+          let newFiles = [...uploadedFiles];
+          let newAudits = [...auditReports];
+          const updatedCatalog = JSON.parse(JSON.stringify(catalog));
+
+          for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array', cellFormula: true, cellNF: true });
+
+            // 1. Parse Repair Estimation Summary (if present)
+            const summaryTabName = workbook.SheetNames.find((name) =>
+              /repair\s*(estimation\s*)?summary/i.test(name.trim())
+            );
+
+            let summaryEstTotal = 0;
+            let summaryActTotal = 0;
+            const summaryRows = [];
+
+            if (summaryTabName) {
+              const sheet = workbook.Sheets[summaryTabName];
+              const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+              let headerRow = -1;
+              let equipCol = -1, prodCol = -1, woCol = -1, estCol = -1, actCol = -1, statusCol = -1, linkCol = -1;
+
+              for (let r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                  const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+                  const txt = String(cell && cell.v ? cell.v : '').trim().toLowerCase();
+                  if (txt.includes('equipment')) { headerRow = r; equipCol = c; }
+                  if (txt === 'product') prodCol = c;
+                  if (txt.includes('work order')) woCol = c;
+                  if (txt.includes('estimate price') || txt.includes('est. price')) estCol = c;
+                  if (txt.includes('actual price') || txt.includes('actual spent')) actCol = c;
+                  if ((txt.includes('stauts') || txt.includes('status')) && statusCol === -1) statusCol = c;
+                  if (txt.includes('press link') || txt.includes('move forwards')) linkCol = c;
+                }
+                if (headerRow !== -1 && estCol !== -1) break;
+              }
+
+              const maxAllowedCol = linkCol !== -1 ? linkCol : range.e.c;
+              let lastEquip = '', lastProd = '', lastWO = '';
+              const seenSharedGroups = new Set();
+
+              if (headerRow !== -1 && estCol !== -1) {
+                for (let r = headerRow + 1; r <= range.e.r; r++) {
+                  const rowTexts = [];
+                  for (let c = 0; c <= maxAllowedCol; c++) {
+                    const cObj = sheet[XLSX.utils.encode_cell({ r, c })];
+                    const v = String(cObj && cObj.v ? cObj.v : '').trim();
+                    if (v) rowTexts.push(v);
+                  }
+                  if (rowTexts.some((t) => /^total$/i.test(t))) break;
+
+                  const getVal = (col) => {
+                    if (col === -1) return '';
+                    const cObj = sheet[XLSX.utils.encode_cell({ r, col })];
+                    return String(cObj && cObj.v ? cObj.v : '').trim();
+                  };
+
+                  const equipVal = getVal(equipCol);
+                  const prodVal = getVal(prodCol);
+                  const woVal = getVal(woCol);
+                  const statusVal = getVal(statusCol).toLowerCase();
+                  const linkVal = getVal(linkCol);
+
+                  if (equipVal) lastEquip = equipVal;
+                  if (prodVal) lastProd = prodVal;
+                  if (woVal) lastWO = woVal;
+
+                  if (statusVal.includes('not required') || statusVal.includes('discussion')) continue;
+
+                  const estParsed = parseMoney(sheet[XLSX.utils.encode_cell({ r, estCol })]);
+                  const actParsed = actCol !== -1 ? parseMoney(sheet[XLSX.utils.encode_cell({ r, actCol })]) : null;
+
+                  if (estParsed && estParsed.val > 0 && lastEquip) {
+                    const cleanLink = linkVal.replace(/['!A1]/g, '').trim();
+                    const sharedKey = lastWO + '|' + cleanLink + '|' + estParsed.val;
+                    if (cleanLink && lastWO && seenSharedGroups.has(sharedKey)) continue;
+                    if (cleanLink && lastWO) seenSharedGroups.add(sharedKey);
+
+                    summaryEstTotal += estParsed.val;
+                    summaryActTotal += actParsed ? actParsed.val : 0;
+
+                    summaryRows.push({
+                      id: file.name + '-SUM-' + r,
+                      sourceFile: file.name,
+                      isSummaryRow: true,
+                      equipment: lastEquip,
+                      product: lastProd || 'GENERAL',
+                      category: classifyCategory(lastEquip),
+                      description: lastEquip + ' (Master Approved Repair)',
+                      qty: 1,
+                      unitPrice: estParsed.val,
+                      estTotal: estParsed.val,
+                      actualSpent: actParsed ? actParsed.val : 0
+                    });
+                  }
+                }
+              }
+            }
+
+            // 2. Parse Individual Equipment / Receipt Tabs & Feed Machine Library + Presets
+            let tabItemsTotal = 0;
+            workbook.SheetNames.forEach((tabName) => {
+              if (tabName === summaryTabName) return;
+              const sheet = workbook.Sheets[tabName];
+              const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+
+              let headerRow = -1, descCol = -1, qtyCol = -1, unitCol = -1, totalCol = -1;
+              for (let r = range.s.r; r <= range.e.r; r++) {
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                  const cObj = sheet[XLSX.utils.encode_cell({ r, c })];
+                  const txt = String(cObj && cObj.v ? cObj.v : '').trim().toLowerCase();
+                  if (/description|scope|part|item|details/.test(txt) && descCol === -1) { headerRow = r; descCol = c; }
+                  if (/reqd|qty|quantity/.test(txt) && qtyCol === -1) qtyCol = c;
+                  if (/unit\s*rate|unit\s*price|each/.test(txt) && unitCol === -1) unitCol = c;
+                  if (/total|amount/.test(txt) && !/unit/.test(txt) && totalCol === -1) totalCol = c;
+                }
+                if (headerRow !== -1 && descCol !== -1 && (unitCol !== -1 || totalCol !== -1)) break;
+              }
+
+              if (headerRow === -1 || descCol === -1) return;
+
+              const machineKey = tabName.trim();
+              if (!updatedCatalog[machineKey]) {
+                updatedCatalog[machineKey] = { parts: [], presets: [] };
+              }
+              const learnedPartIds = [];
+
+              for (let r = headerRow + 1; r <= range.e.r; r++) {
+                const dObj = sheet[XLSX.utils.encode_cell({ r, descCol })];
+                const desc = String(dObj && dObj.v ? dObj.v : '').trim();
+                if (!desc || /^(sub-?total|total|grand total)/i.test(desc)) continue;
+
+                const qObj = qtyCol !== -1 ? sheet[XLSX.utils.encode_cell({ r, qtyCol })] : null;
+                const rawQty = qObj ? Number(qObj.v) : 1;
+                const qty = !isNaN(rawQty) && rawQty > 0 ? rawQty : 1;
+                const uObj = unitCol !== -1 ? parseMoney(sheet[XLSX.utils.encode_cell({ r, unitCol })]) : null;
+                const tObj = totalCol !== -1 ? parseMoney(sheet[XLSX.utils.encode_cell({ r, totalCol })]) : null;
+
+                const unitPrice = uObj ? uObj.val : (tObj ? tObj.val / qty : 0);
+                const lineTotal = tObj ? tObj.val : unitPrice * qty;
+
+                if (lineTotal > 0) {
+                  tabItemsTotal += lineTotal;
+                  const cat = classifyCategory(desc);
+
+                  newParts.push({
+                    id: file.name + '-' + tabName + '-' + r,
+                    sourceFile: file.name,
+                    isSummaryRow: false,
+                    equipment: machineKey,
+                    product: 'EQUIPMENT',
+                    category: cat,
+                    description: desc,
+                    qty,
+                    unitPrice,
+                    estTotal: lineTotal,
+                    actualSpent: 0
+                  });
+
+                  const partId = machineKey + '-xl-' + r;
+                  if (!updatedCatalog[machineKey].parts.some((p) => p.name === desc)) {
+                    updatedCatalog[machineKey].parts.push({
+                      id: partId,
+                      name: desc,
+                      code: machineKey.toUpperCase().slice(0, 6) + '-' + r,
+                      category: cat,
+                      defaultQty: qty,
+                      unitPrice: Number(unitPrice.toFixed(2))
+                    });
+                  }
+                  learnedPartIds.push(partId);
+                }
+              }
+
+              if (learnedPartIds.length > 0 && updatedCatalog[machineKey].presets.length === 0) {
+                updatedCatalog[machineKey].presets.push({
+                  code: machineKey + ' P1',
+                  title: 'Excel Imported Package',
+                  category: 'Corrective Maintenance',
+                  partIds: learnedPartIds.slice(0, 8)
+                });
+              }
+            });
+
+            newParts = newParts.concat(summaryRows);
+            newFiles.push({ name: file.name, size: file.size, uploadedAt: new Date().toISOString() });
+            newAudits.push({
+              fileName: file.name,
+              summaryEst: summaryEstTotal,
+              summaryAct: summaryActTotal,
+              tabEst: tabItemsTotal
+            });
+          }
+
+          setPartsData(newParts);
+          setUploadedFiles(newFiles);
+          setAuditReports(newAudits);
+          setCatalog(updatedCatalog);
+          triggerToast('Loaded ' + files.length + ' Excel file(s) into both Consolidation & Machine Presets.');
+          e.target.value = '';
+        };
+
+        const handleClearAll = async () => {
+          await dbClear();
+          setPartsData([]);
+          setUploadedFiles([]);
+          setAuditReports([]);
+          setSavedEstimations([]);
+          setCatalog(DEFAULT_CATALOG);
+          triggerToast('Cleared uploaded trackers & reset machine library to defaults.');
+        };
+
+        const handleExportBackup = () => {
+          const blob = new Blob(
+            [JSON.stringify({ partsData, uploadedFiles, auditReports, catalog, savedEstimations }, null, 2)],
+            { type: 'application/json' }
+          );
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'workshop-repair-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        const handleImportBackup = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          if (parsed.partsData) setPartsData(parsed.partsData);
+          if (parsed.uploadedFiles) setUploadedFiles(parsed.uploadedFiles);
+          if (parsed.auditReports) setAuditReports(parsed.auditReports);
+          if (parsed.catalog) setCatalog({ ...DEFAULT_CATALOG, ...parsed.catalog });
+          if (parsed.savedEstimations) setSavedEstimations(parsed.savedEstimations);
+          triggerToast('Restored workspace from JSON backup.');
+        };
+
+        // ==========================================
+        // Machine Dropdown, Presets & Row-by-Row Handlers
+        // ==========================================
+        const machineNames = useMemo(() => Object.keys(catalog), [catalog]);
+        const currentMachineData = catalog[selectedMachine] || { parts: [], presets: [] };
+
+        const dropdownParts = useMemo(() => {
+          if (activeCategory === 'ALL') return currentMachineData.parts;
+          return currentMachineData.parts.filter((p) => p.category === activeCategory);
+        }, [currentMachineData, activeCategory]);
+
+        const handleSelectMachine = (machine) => {
+          setSelectedMachine(machine);
+          setActiveCategory('ALL');
+          setEstRows([
+            { rowId: 1, partId: '', customPartName: '', category: 'Preventive Maintenance', qty: 1, unitPrice: 0 },
+            { rowId: 2, partId: '', customPartName: '', category: 'Corrective Maintenance', qty: 1, unitPrice: 0 }
+          ]);
+        };
+
+        const handleRowPartChange = (rowId, partId) => {
+          if (partId === '__CUSTOM__') {
+            setEstRows((prev) =>
+              prev.map((r) => (r.rowId === rowId ? { ...r, partId: '__CUSTOM__', customPartName: '', unitPrice: 0 } : r))
+            );
+            return;
+          }
+          const found = currentMachineData.parts.find((p) => p.id === partId);
+          setEstRows((prev) =>
+            prev.map((r) => {
+              if (r.rowId !== rowId) return r;
+              if (!found) return { ...r, partId: '', customPartName: '', unitPrice: 0 };
+              return {
+                ...r,
+                partId: found.id,
+                customPartName: '',
+                category: found.category,
+                qty: found.defaultQty || 1,
+                unitPrice: found.unitPrice || 0
+              };
+            })
+          );
+        };
+
+        const handleRowFieldChange = (rowId, field, value) => {
+          setEstRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, [field]: value } : r)));
+        };
+
+        const handleAddRow = () => {
+          const nextId = estRows.length ? Math.max(...estRows.map((r) => r.rowId)) + 1 : 1;
+          setEstRows([
+            ...estRows,
+            {
+              rowId: nextId,
+              partId: '',
+              customPartName: '',
+              category: activeCategory === 'ALL' ? 'Preventive Maintenance' : activeCategory,
+              qty: 1,
+              unitPrice: 0
+            }
+          ]);
+        };
+
+        const handleRemoveRow = (rowId) => {
+          setEstRows((prev) => prev.filter((r) => r.rowId !== rowId));
+        };
+
+        const handleApplyPreset = (preset) => {
+          const populated = preset.partIds
+            .map((pid, idx) => {
+              const part = currentMachineData.parts.find((p) => p.id === pid);
+              if (!part) return null;
+              return {
+                rowId: idx + 1,
+                partId: part.id,
+                customPartName: '',
+                category: part.category,
+                qty: part.defaultQty || 1,
+                unitPrice: part.unitPrice || 0
+              };
+            })
+            .filter(Boolean);
+
+          if (populated.length > 0) {
+            setEstRows(populated);
+            triggerToast('Applied ' + preset.code + ' (' + populated.length + ' items)');
+          }
+        };
+
+        const handleSaveAsPreset = () => {
+          const validPartIds = estRows.map((r) => r.partId).filter((id) => id && id !== '__CUSTOM__');
+          if (!newPresetCode.trim() || validPartIds.length === 0) {
+            triggerToast('Enter preset code (e.g. ' + selectedMachine + ' P4) & select at least 1 library part.');
+            return;
+          }
+          const updatedCatalog = { ...catalog };
+          updatedCatalog[selectedMachine] = {
+            ...currentMachineData,
+            presets: [
+              ...currentMachineData.presets,
+              {
+                code: newPresetCode.trim(),
+                title: newPresetCategory + ' Package',
+                category: newPresetCategory,
+                partIds: validPartIds
+              }
+            ]
+          };
+          setCatalog(updatedCatalog);
+          setNewPresetCode('');
+          triggerToast('Saved new preset: ' + newPresetCode.trim() + ' (' + validPartIds.length + ')');
+        };
+
+        const handleSaveEstimationRecord = () => {
+          const validLines = estRows.filter((r) => r.partId || r.customPartName.trim());
+          if (!validLines.length) {
+            triggerToast('Select or enter at least 1 part row before saving estimation.');
+            return;
+          }
+          const total = validLines.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unitPrice) || 0), 0);
+          const record = {
+            estNumber,
+            machine: selectedMachine,
+            date: new Date().toISOString().slice(0, 10),
+            rows: validLines,
+            total
+          };
+          const filtered = savedEstimations.filter((e) => e.estNumber !== estNumber);
+          setSavedEstimations([record, ...filtered]);
+
+          // Auto-increment next estimation number
+          const match = estNumber.match(/^(.*?)(\d+)$/);
+          if (match) {
+            const nextNum = String(Number(match[2]) + 1).padStart(match[2].length, '0');
+            setEstNumber(match[1] + nextNum);
+          }
+          triggerToast('Saved ' + record.estNumber + ' for ' + selectedMachine + ' (' + fmt(total) + ')');
+        };
+
+        const handleLoadSavedEstimation = (rec) => {
+          setSelectedMachine(rec.machine);
+          setEstNumber(rec.estNumber);
+          setEstRows(rec.rows);
+          triggerToast('Loaded ' + rec.estNumber + ' for editing.');
+        };
+
+        const handleExportNewFormatExcel = () => {
+          const sheetRows = [
+            ['REPAIR ESTIMATION & PARTS APPROVAL SHEET'],
+            ['Estimation Ref:', estNumber, 'Machine Type:', selectedMachine, 'Date:', new Date().toISOString().slice(0, 10)],
+            [],
+            ['S/N', 'Equipment Name', 'Part / Item Description', 'Maintenance Category', 'Possible Quantity', 'Unit Price (SGD)', 'Total Price (SGD)']
+          ];
+
+          estRows.forEach((r, idx) => {
+            const partObj = currentMachineData.parts.find((p) => p.id === r.partId);
+            const desc = r.partId === '__CUSTOM__' ? r.customPartName : (partObj ? partObj.name : '');
+            if (!desc) return;
+            const qty = Number(r.qty) || 0;
+            const unit = Number(r.unitPrice) || 0;
+            sheetRows.push([idx + 1, selectedMachine, desc, r.category, qty, unit, qty * unit]);
+          });
+
+          const total = estRows.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unitPrice) || 0), 0);
+          sheetRows.push(['', '', '', '', '', 'GRAND TOTAL (SGD)', total]);
+
+          const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Repair Estimation');
+          XLSX.writeFile(wb, estNumber + '_' + selectedMachine + '.xlsx');
+        };
+
+        // ==========================================
+        // Computed Totals & Filters
+        // ==========================================
+        const estGrandTotal = useMemo(() => {
+          return estRows.reduce((sum, r) => sum + (Number(r.qty) || 0) * (Number(r.unitPrice) || 0), 0);
+        }, [estRows]);
+
+        const estCategoryTotals = useMemo(() => {
+          const map = {};
+          CATEGORIES.forEach((c) => (map[c] = 0));
+          estRows.forEach((r) => {
+            map[r.category] = (map[r.category] || 0) + (Number(r.qty) || 0) * (Number(r.unitPrice) || 0);
+          });
+          return map;
+        }, [estRows]);
+
+        const consolidationTotals = useMemo(() => {
+          const summaryItems = partsData.filter((p) => p.isSummaryRow);
+          const est = summaryItems.reduce((acc, r) => acc + r.estTotal, 0);
+          const act = summaryItems.reduce((acc, r) => acc + r.actualSpent, 0);
+          const partCount = partsData.filter((p) => !p.isSummaryRow).reduce((acc, r) => acc + r.qty, 0);
+          return { est, act, rem: est - act, partCount };
+        }, [partsData]);
+
+        const filteredLedgerRows = useMemo(() => {
+          return partsData.filter((item) => {
+            if (ledgerViewMode === 'SUMMARY' && !item.isSummaryRow) return false;
+            if (ledgerViewMode === 'PARTS' && item.isSummaryRow) return false;
+            if (selectedProductFilter !== 'ALL' && item.product !== selectedProductFilter) return false;
+            if (searchQuery.trim()) {
+              const q = searchQuery.toLowerCase();
+              return (
+                item.equipment.toLowerCase().includes(q) ||
+                item.description.toLowerCase().includes(q) ||
+                item.sourceFile.toLowerCase().includes(q)
+              );
+            }
+            return true;
+          });
+        }, [partsData, ledgerViewMode, selectedProductFilter, searchQuery]);
+
+        const fmt = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        if (!isHydrated) {
+          return h('div', { className: 'p-8 text-slate-400' }, 'Loading saved workshop workspace...');
+        }
+
+        return h('div', { className: 'max-w-7xl mx-auto p-6 space-y-6' },
+          toast && h('div', { className: 'fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium no-print' }, toast),
+
+          // ==========================================
+          // Global Header & File Controls
+          // ==========================================
+          h('header', { className: 'flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl no-print' },
+            h('div', null,
+              h('h1', { className: 'text-xl font-bold text-white' }, 'Workshop Maintenance • Repair Estimation & Cost Hub'),
+              h('p', { className: 'text-xs text-slate-400 mt-1' },
+                'Auto-persisted in browser storage (' + uploadedFiles.length + ' Excel tracker(s), ' + machineNames.length + ' machines indexed)'
+              )
+            ),
+            h('div', { className: 'flex flex-wrap items-center gap-2' },
+              h('label', { className: 'cursor-pointer bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold px-4 py-2 rounded-xl text-sm transition' },
+                '+ Upload Excel Trackers',
+                h('input', { type: 'file', multiple: true, accept: '.xlsx,.xls', onChange: handleMultiExcelUpload, className: 'hidden' })
+              ),
+              h('button', { onClick: handleExportBackup, className: 'bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-xl text-xs font-medium' }, 'Export Backup (.json)'),
+              h('label', { className: 'cursor-pointer bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-xl text-xs font-medium' },
+                'Restore Backup',
+                h('input', { type: 'file', accept: '.json', onChange: handleImportBackup, className: 'hidden' })
+              ),
+              uploadedFiles.length > 0 && h('button', { onClick: handleClearAll, className: 'bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-800 px-3 py-2 rounded-xl text-xs font-medium' }, 'Remove All Sheets')
+            )
+          ),
+
+          // ==========================================
+          // Mode Switcher Tabs
+          // ==========================================
+          h('nav', { className: 'flex flex-wrap gap-2 bg-slate-900 border border-slate-800 p-2 rounded-2xl no-print' },
+            h('button', {
+              onClick: () => setActiveTab('ESTIMATOR'),
+              className: 'px-4 py-2.5 rounded-xl text-sm font-bold transition ' + (activeTab === 'ESTIMATOR' ? 'bg-amber-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800')
+            }, '1. Machine Dropdown & Preset Estimation Builder'),
+            h('button', {
+              onClick: () => setActiveTab('CONSOLIDATION'),
+              className: 'px-4 py-2.5 rounded-xl text-sm font-bold transition ' + (activeTab === 'CONSOLIDATION' ? 'bg-amber-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800')
+            }, '2. Master Excel Cost Consolidation & Audit (' + uploadedFiles.length + ' Files)')
+          ),
+
+          // ==========================================
+          // TAB 1: MACHINE DROPDOWN, PRESETS, CATEGORIES & APPROVAL PDF
+          // ==========================================
+          activeTab === 'ESTIMATOR' && h('div', { className: 'space-y-6' },
+
+            // Machine Dropdown + Quick Presets (C6, Hutte, XCMG + Imported Excel Machines)
+            h('section', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl no-print' },
+              h('div', { className: 'space-y-2' },
+                h('label', { className: 'block text-xs font-semibold uppercase tracking-wider text-amber-400' }, '1. Machine Type Drop Down'),
+                h('select', {
+                  value: selectedMachine,
+                  onChange: (e) => handleSelectMachine(e.target.value),
+                  className: 'w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-semibold text-white focus:outline-none focus:border-amber-500'
+                },
+                  machineNames.map((m) =>
+                    h('option', { key: m, value: m }, m + ' (' + catalog[m].parts.length + ' parts)')
+                  )
+                ),
+                h('div', { className: 'pt-1' },
+                  h('label', { className: 'block text-xs text-slate-400 mb-1' }, 'Auto-Generated Estimation No.'),
+                  h('input', {
+                    type: 'text',
+                    value: estNumber,
+                    onChange: (e) => setEstNumber(e.target.value),
+                    className: 'w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white'
+                  })
+                )
+              ),
+
+              h('div', { className: 'lg:col-span-2 space-y-2' },
+                h('div', { className: 'flex items-center justify-between' },
+                  h('span', { className: 'text-xs font-semibold uppercase tracking-wider text-amber-400' },
+                    '2. Quick Presets for ' + selectedMachine + ' (Click to Auto-Fill Rows)'
+                  ),
+                  h('span', { className: 'text-xs text-slate-400' }, '(No. of items in parts)')
+                ),
+                h('div', { className: 'flex flex-wrap gap-2.5 pt-1' },
+                  currentMachineData.presets.length === 0
+                    ? h('span', { className: 'text-xs text-slate-500' }, 'No presets saved for this machine yet.')
+                    : currentMachineData.presets.map((preset, idx) =>
+                        h('button', {
+                          key: idx,
+                          onClick: () => handleApplyPreset(preset),
+                          className: 'bg-slate-800 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 px-4 py-2.5 rounded-xl text-left transition group'
+                        },
+                          h('div', { className: 'text-sm font-bold' }, preset.code + ' (' + preset.partIds.length + ')'),
+                          h('div', { className: 'text-[11px] text-slate-400 group-hover:text-slate-900' }, preset.title)
+                        )
+                      )
+                ),
+                h('div', { className: 'flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80' },
+                  h('input', {
+                    type: 'text',
+                    value: newPresetCode,
+                    onChange: (e) => setNewPresetCode(e.target.value),
+                    placeholder: 'New preset code (e.g. ' + selectedMachine + ' P4)',
+                    className: 'bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs w-48'
+                  }),
+                  h('select', {
+                    value: newPresetCategory,
+                    onChange: (e) => setNewPresetCategory(e.target.value),
+                    className: 'bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs'
+                  }, CATEGORIES.map((c) => h('option', { key: c, value: c }, c))),
+                  h('button', {
+                    onClick: handleSaveAsPreset,
+                    className: 'bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-semibold'
+                  }, '+ Save Rows as Preset')
+                )
+              )
+            ),
+
+            // 4 Maintenance Categories Filter & Summary Strip
+            h('section', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 no-print' },
+              h('button', {
+                onClick: () => setActiveCategory('ALL'),
+                className: 'p-3.5 rounded-2xl border text-left transition ' + (activeCategory === 'ALL' ? 'bg-amber-500/15 border-amber-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300')
+              },
+                h('div', { className: 'text-xs text-slate-400' }, 'All Categories'),
+                h('div', { className: 'text-lg font-bold text-amber-400 mt-0.5' }, fmt(estGrandTotal))
+              ),
+              CATEGORIES.map((cat) =>
+                h('button', {
+                  key: cat,
+                  onClick: () => setActiveCategory(cat),
+                  className: 'p-3.5 rounded-2xl border text-left transition ' + (activeCategory === cat ? 'bg-amber-500/15 border-amber-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300')
+                },
+                  h('div', { className: 'text-xs font-medium truncate' }, cat),
+                  h('div', { className: 'text-lg font-bold mt-0.5' }, fmt(estCategoryTotals[cat] || 0))
+                )
+              )
+            ),
+
+            // Printable Approval Sheet + Row-by-Row Dropdown Table
+            h('section', { id: 'printable-approval-sheet', className: 'bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4' },
+              h('div', { className: 'flex flex-wrap justify-between gap-4 pb-4 border-b border-slate-800 text-xs' },
+                h('div', null,
+                  h('div', { className: 'font-bold text-slate-200 text-sm' }, 'Prepared & Verified By:'),
+                  h('div', { className: 'text-slate-400 mt-0.5' }, 'Workshop Maintenance Team • Machine: ' + selectedMachine + ' • Ref: ' + estNumber)
+                ),
+                h('div', { className: 'text-right' },
+                  h('div', { className: 'font-bold text-slate-200 text-sm' }, 'Approved By (Management / HOD):'),
+                  h('div', { className: 'text-slate-400 mt-1' }, 'Signature & Date: ________________________')
+                )
+              ),
+
+              h('div', { className: 'overflow-x-auto' },
+                h('table', { className: 'w-full text-left text-sm' },
+                  h('thead', { className: 'bg-slate-950 text-slate-400 text-xs uppercase border-b border-slate-800' },
+                    h('tr', null,
+                      h('th', { className: 'px-3 py-2.5 w-16' }, 'Row'),
+                      h('th', { className: 'px-3 py-2.5' }, selectedMachine + ' Part Drop Down / Extra Item'),
+                      h('th', { className: 'px-3 py-2.5 w-48' }, 'Maintenance Category'),
+                      h('th', { className: 'px-3 py-2.5 w-24 text-right' }, 'Possible Qty'),
+                      h('th', { className: 'px-3 py-2.5 w-32 text-right' }, 'Unit Price'),
+                      h('th', { className: 'px-3 py-2.5 w-32 text-right' }, 'Total Price'),
+                      h('th', { className: 'px-3 py-2.5 w-10 no-print' }, '')
+                    )
+                  ),
+                  h('tbody', { className: 'divide-y divide-slate-800/70' },
+                    estRows.map((row, idx) => {
+                      const lineTotal = (Number(row.qty) || 0) * (Number(row.unitPrice) || 0);
+                      return h('tr', { key: row.rowId },
+                        h('td', { className: 'px-3 py-2.5 font-mono text-xs text-slate-400' }, 'Row ' + (idx + 1)),
+                        h('td', { className: 'px-3 py-2.5 space-y-1.5' },
+                          h('select', {
+                            value: row.partId,
+                            onChange: (e) => handleRowPartChange(row.rowId, e.target.value),
+                            className: 'w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm text-white'
+                          },
+                            h('option', { value: '' }, '-- Select ' + selectedMachine + ' Row ' + (idx + 1) + ' Part --'),
+                            dropdownParts.map((p) =>
+                              h('option', { key: p.id, value: p.id }, p.name + ' (' + fmt(p.unitPrice) + ')')
+                            ),
+                            h('option', { value: '__CUSTOM__' }, '+ Manual Extra Part / Custom Item...')
+                          ),
+                          row.partId === '__CUSTOM__' && h('input', {
+                            type: 'text',
+                            value: row.customPartName,
+                            onChange: (e) => handleRowFieldChange(row.rowId, 'customPartName', e.target.value),
+                            placeholder: 'Enter custom part or repair item description...',
+                            className: 'w-full bg-slate-950 border border-amber-500/50 rounded-lg px-2.5 py-1.5 text-xs text-white'
+                          })
+                        ),
+                        h('td', { className: 'px-3 py-2.5' },
+                          h('select', {
+                            value: row.category,
+                            onChange: (e) => handleRowFieldChange(row.rowId, 'category', e.target.value),
+                            className: 'w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200'
+                          }, CATEGORIES.map((c) => h('option', { key: c, value: c }, c)))
+                        ),
+                        h('td', { className: 'px-3 py-2.5 text-right' },
+                          h('input', {
+                            type: 'number',
+                            min: 1,
+                            value: row.qty,
+                            onChange: (e) => handleRowFieldChange(row.rowId, 'qty', Number(e.target.value)),
+                            className: 'w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-right text-sm'
+                          })
+                        ),
+                        h('td', { className: 'px-3 py-2.5 text-right' },
+                          h('input', {
+                            type: 'number',
+                            step: '0.01',
+                            value: row.unitPrice,
+                            onChange: (e) => handleRowFieldChange(row.rowId, 'unitPrice', Number(e.target.value)),
+                            className: 'w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-right text-sm'
+                          })
+                        ),
+                        h('td', { className: 'px-3 py-2.5 text-right font-semibold text-amber-400' }, fmt(lineTotal)),
+                        h('td', { className: 'px-3 py-2.5 text-center no-print' },
+                          h('button', {
+                            onClick: () => handleRemoveRow(row.rowId),
+                            className: 'text-slate-500 hover:text-rose-400 text-xs font-bold px-2 py-1'
+                          }, '✕')
+                        )
+                      );
+                    })
+                  ),
+                  h('tfoot', { className: 'border-t border-slate-700 bg-slate-950/60' },
+                    h('tr', null,
+                      h('td', { colSpan: 5, className: 'px-3 py-3 text-right font-bold uppercase text-xs text-slate-300' },
+                        'Total Estimated Repair Cost (' + selectedMachine + ')'
+                      ),
+                      h('td', { className: 'px-3 py-3 text-right font-bold text-base text-amber-400' }, fmt(estGrandTotal)),
+                      h('td', { className: 'no-print' })
+                    )
+                  )
+                )
+              ),
+
+              h('div', { className: 'flex flex-wrap justify-between items-center gap-3 pt-2 no-print' },
+                h('button', {
+                  onClick: handleAddRow,
+                  className: 'bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-semibold'
+                }, '+ Add Next Part Row (Row ' + (estRows.length + 1) + ')'),
+
+                h('div', { className: 'flex flex-wrap gap-2' },
+                  h('button', {
+                    onClick: handleSaveEstimationRecord,
+                    className: 'bg-sky-600 hover:bg-sky-500 text-white font-semibold px-4 py-2 rounded-xl text-xs transition'
+                  }, 'Save Record & Next Est. No.'),
+                  h('button', {
+                    onClick: handleExportNewFormatExcel,
+                    className: 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-semibold px-4 py-2 rounded-xl text-xs transition'
+                  }, 'Download .xlsx (New Format)'),
+                  h('button', {
+                    onClick: () => window.print(),
+                    className: 'bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-xl text-xs transition'
+                  }, 'Generate / Print Approval PDF')
+                )
+              )
+            ),
+
+            // Saved Past Estimation Records (Allows Reloading & Updating Past Records)
+            savedEstimations.length > 0 && h('section', { className: 'bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2 no-print' },
+              h('div', { className: 'text-xs font-bold uppercase text-slate-400' }, 'Saved Past Estimation Records (Click to Load & Update)'),
+              h('div', { className: 'flex flex-wrap gap-2' },
+                savedEstimations.map((rec) =>
+                  h('button', {
+                    key: rec.estNumber,
+                    onClick: () => handleLoadSavedEstimation(rec),
+                    className: 'bg-slate-950 hover:bg-slate-800 border border-slate-800 px-3 py-2 rounded-xl text-xs text-left'
+                  },
+                    h('span', { className: 'font-bold text-amber-400' }, rec.estNumber),
+                    h('span', { className: 'text-slate-300 ml-2' }, rec.machine + ' • ' + fmt(rec.total))
+                  )
+                )
+              )
+            )
+          ),
+
+          // ==========================================
+          // TAB 2: MASTER EXCEL COST CONSOLIDATION & AUDIT (PREVIOUS FUNCTIONS)
+          // ==========================================
+          activeTab === 'CONSOLIDATION' && h('div', { className: 'space-y-6' },
+
+            // 4 KPI Cards
+            h('section', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4' },
+              h('div', { className: 'bg-slate-900 border border-slate-800 p-4 rounded-2xl' },
+                h('div', { className: 'text-xs text-slate-400 uppercase' }, 'Master Est. Cost (SGD)'),
+                h('div', { className: 'text-2xl font-bold text-amber-400 mt-1' }, fmt(consolidationTotals.est))
+              ),
+              h('div', { className: 'bg-slate-900 border border-slate-800 p-4 rounded-2xl' },
+                h('div', { className: 'text-xs text-slate-400 uppercase' }, 'Actual Spent (SGD)'),
+                h('div', { className: 'text-2xl font-bold text-emerald-400 mt-1' }, fmt(consolidationTotals.act))
+              ),
+              h('div', { className: 'bg-slate-900 border border-slate-800 p-4 rounded-2xl' },
+                h('div', { className: 'text-xs text-slate-400 uppercase' }, 'Remaining Balance'),
+                h('div', { className: 'text-2xl font-bold text-sky-400 mt-1' }, fmt(consolidationTotals.rem))
+              ),
+              h('div', { className: 'bg-slate-900 border border-slate-800 p-4 rounded-2xl' },
+                h('div', { className: 'text-xs text-slate-400 uppercase' }, 'Indexed Component Qty'),
+                h('div', { className: 'text-2xl font-bold text-white mt-1' }, consolidationTotals.partCount.toLocaleString())
+              )
+            ),
+
+            // Workbook Audit Panel
+            auditReports.length > 0 && h('section', { className: 'space-y-2' },
+              auditReports.map((rep, idx) =>
+                h('div', { key: idx, className: 'flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 px-4 py-3 rounded-xl text-xs' },
+                  h('span', { className: 'font-semibold text-amber-400 uppercase' }, rep.fileName),
+                  h('div', { className: 'flex flex-wrap gap-3' },
+                    h('span', null, 'Summary Est: ', h('strong', null, fmt(rep.summaryEst))),
+                    h('span', null, 'Summary Spent: ', h('strong', { className: 'text-emerald-400' }, fmt(rep.summaryAct))),
+                    h('span', null, 'Receipt Tabs Total: ', h('strong', null, fmt(rep.tabEst)))
+                  )
+                )
+              )
+            ),
+
+            // Filter & Search Bar
+            h('section', { className: 'flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl' },
+              h('div', { className: 'flex gap-2' },
+                h('button', {
+                  onClick: () => setLedgerViewMode('SUMMARY'),
+                  className: 'px-3 py-1.5 rounded-lg text-xs font-semibold ' + (ledgerViewMode === 'SUMMARY' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300')
+                }, 'Repair Summary (1:1)'),
+                h('button', {
+                  onClick: () => setLedgerViewMode('PARTS'),
+                  className: 'px-3 py-1.5 rounded-lg text-xs font-semibold ' + (ledgerViewMode === 'PARTS' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300')
+                }, 'All Receipt Parts')
+              ),
+              h('input', {
+                type: 'text',
+                value: searchQuery,
+                onChange: (e) => setSearchQuery(e.target.value),
+                placeholder: 'Search equipment, part description, or file...',
+                className: 'bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm w-full sm:w-80 focus:outline-none focus:border-amber-500'
+              })
+            ),
+
+            // Consolidated Ledger Table
+            h('section', { className: 'bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden' },
+              h('div', { className: 'overflow-x-auto' },
+                h('table', { className: 'w-full text-left text-sm' },
+                  h('thead', { className: 'bg-slate-950 text-slate-400 text-xs uppercase border-b border-slate-800' },
+                    h('tr', null,
+                      h('th', { className: 'px-4 py-3' }, 'Source File'),
+                      h('th', { className: 'px-4 py-3' }, 'Equipment / Tab'),
+                      h('th', { className: 'px-4 py-3' }, 'Description'),
+                      h('th', { className: 'px-4 py-3 text-right' }, 'Qty'),
+                      h('th', { className: 'px-4 py-3 text-right' }, 'Unit Price'),
+                      h('th', { className: 'px-4 py-3 text-right' }, 'Est. Total'),
+                      h('th', { className: 'px-4 py-3 text-right' }, 'Actual Spent')
+                    )
+                  ),
+                  h('tbody', { className: 'divide-y divide-slate-800/70' },
+                    filteredLedgerRows.length === 0
+                      ? h('tr', null, h('td', { colSpan: 7, className: 'px-4 py-10 text-center text-slate-500' }, 'No records loaded. Upload your Excel trackers above to view consolidated costs.'))
+                      : filteredLedgerRows.map((row) =>
+                          h('tr', { key: row.id, className: 'hover:bg-slate-800/40' },
+                            h('td', { className: 'px-4 py-3 text-xs text-slate-400' }, row.sourceFile),
+                            h('td', { className: 'px-4 py-3 font-medium text-white' }, row.equipment),
+                            h('td', { className: 'px-4 py-3 text-slate-300' }, row.description),
+                            h('td', { className: 'px-4 py-3 text-right' }, row.qty),
+                            h('td', { className: 'px-4 py-3 text-right' }, fmt(row.unitPrice)),
+                            h('td', { className: 'px-4 py-3 text-right font-semibold text-amber-400' }, fmt(row.estTotal)),
+                            h('td', { className: 'px-4 py-3 text-right text-emerald-400' }, fmt(row.actualSpent))
+                          )
+                        )
+                  )
+                )
+              )
+            )
+          )
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(h(App));
+    })();
+  </script>
+</body>
+</html>
