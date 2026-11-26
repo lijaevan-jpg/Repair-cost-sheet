@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workshop Maintenance • Repair Estimation, Cost Consolidation & End Order Sheet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <style>
+    /* Official End Order Sheet Print Layout (ASE-OE-FM-1013-SGP Rev: 0_2 Oct 2017) */
+    #official-end-order-print {
+      display: none;
+    }
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #app-shell {
+        display: none !important;
+      }
+      #official-end-order-print {
+        display: block !important;
+        width: 100%;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11px;
+      }
+      .order-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      .order-table td, .order-table th {
+        border: 1px solid #000000;
+        padding: 4px 6px;
+        vertical-align: middle;
+        word-wrap: break-word;
+      }
+      .order-title {
+        font-size: 18px;
+        font-weight: 700;
+        text-align: center;
+        letter-spacing: 0.5px;
+        padding: 8px !important;
+        background: #f3f4f6 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .order-hdr-bg {
+        background: #e5e7eb !important;
+        font-weight: 700;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .order-checked {
+        background: #fde68a !important;
+        font-weight: 700;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+  <div id="boot-error" class="hidden max-w-2xl mx-auto mt-10 p-4 bg-rose-950 border border-rose-700 text-rose-200 rounded-xl text-sm font-mono"></div>
+  <div id="root"></div>
+
+  <script>
+    window.onerror = function (msg, url, line) {
+      const box = document.getElementById('boot-error');
+      if (box) {
+        box.classList.remove('hidden');
+        box.textContent = 'Startup Error: ' + msg + ' (Line ' + line + ')';
+      }
+    };
+
+    (function () {
+      if (!window.React || !window.ReactDOM || !window.XLSX) {
+        const box = document.getElementById('boot-error');
+        if (box) {
+          box.classList.remove('hidden');
+          box.textContent = 'Required libraries failed to load. Check internet connection.';
+        }
+        return;
+      }
+
+      const { useState, useEffect, useMemo, createElement: h, Fragment } = React;
+
+      // ==========================================
+      // 1. IndexedDB Persistence (Survives Reloads)
+      // ==========================================
+      const DB_NAME = 'KellerUnifiedRepairDB_v4';
+      const STORE_NAME = 'workspace';
+
+      function openDB() {
+        return new Promise((resolve, reject) => {
+          try {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+
+      async function dbSet(key, val) {
+        try {
+          const db = await openDB();
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).put(val, key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (_) {}
+      }
+
+      async function dbGet(key) {
+        try {
+          const db = await openDB();
+          return await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).get(key);
+            req.onsuccess = () => resolve(req.result ?? null);
+            req.onerror = () => reject(req.error);
+          });
+        } catch (_) {
+          return null;
+        }
+      }
+
+      async function dbClear() {
+        try {
+          const db = await openDB();
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (_) {}
+      }
+
+      // ==========================================
+      // 2. Categories, Priorities & Machine Library (C6, Hutte, XCMG)
+      // ==========================================
+      const CATEGORIES = [
+        'Preventive Maintainance',
+        'Corrective Maintainance',
+        'Property Damage',
+        'Modification'
+      ];
+
+      const PRIORITIES = [
+        { code: 'P1', label: 'P1 Urgent' },
+        { code: 'P2', label: 'P2 <7Days' },
+        { code: 'P3', label: 'P3 7-30 Days' },
+        { code: 'P4', label: 'P4 30-60 Days' }
+      ];
+
+      const DEFAULT_CATALOG = {
+        C6: {
+          parts: [
+            { id: 'c6-1', name: 'Sliding Bearing (Mast Assembly)', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 70.00 },
+            { id: 'c6-2', name: 'Mast Chain (SLH Heavy Duty)', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 350.00 },
+            { id: 'c6-3', name: 'Hydraulic Oil Seal Kit (TE 70x90x10)', supplier: 'Hydro', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 38.00 },
+            { id: 'c6-4', name: 'Return Filter & O-Ring Service Set', supplier: 'Inventory', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 1, unitPrice: 145.00 },
+            { id: 'c6-5', name: 'Rotary Head Bearing & Octagon Shaft', supplier: 'YWH', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1850.00 },
+            { id: 'c6-6', name: 'Wire Rope Winch Cable (26mm)', supplier: 'Kianon', allocation: 'Site', category: 'Corrective Maintainance', defaultQty: 2, unitPrice: 480.00 },
+            { id: 'c6-7', name: 'T20 EP Rotary Compression Spring', supplier: 'YWH', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 4, unitPrice: 95.00 },
+            { id: 'c6-8', name: 'Remote Control Transmitter Housing', supplier: 'D&G', allocation: 'Site', category: 'Property Damage', defaultQty: 1, unitPrice: 752.00 },
+            { id: 'c6-9', name: 'Hydraulic Hose Guard & Clamp Bracket', supplier: 'YWH', allocation: 'Site', category: 'Property Damage', defaultQty: 3, unitPrice: 120.00 },
+            { id: 'c6-10', name: 'Preventer Jaw Clamp (Hardened 4140)', supplier: 'YWH', allocation: 'Site', category: 'Modification', defaultQty: 2, unitPrice: 410.00 },
+            { id: 'c6-11', name: 'Auxiliary Sensor Wiring Harness Mod', supplier: 'Keller Elec', allocation: 'Yard', category: 'Modification', defaultQty: 1, unitPrice: 320.00 }
+          ],
+          presets: [
+            { code: 'C6 P1', title: 'Standard Mast & Seal Service', category: 'Preventive Maintainance', priority: 'P2', partIds: ['c6-1', 'c6-2', 'c6-3', 'c6-4'] },
+            { code: 'C6 P2', title: 'Rotary & Winch Overhaul', category: 'Corrective Maintainance', priority: 'P1', partIds: ['c6-5', 'c6-6', 'c6-7', 'c6-1'] },
+            { code: 'C6 P3', title: 'Full Yard Re-Mobilisation Package', category: 'Modification', priority: 'P3', partIds: ['c6-1', 'c6-2', 'c6-3', 'c6-5', 'c6-6', 'c6-10', 'c6-11'] }
+          ]
+        },
+        Hutte: {
+          parts: [
+            { id: 'hut-1', name: 'Hutte Feed Cylinder Seal Kit', supplier: 'Hydro', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 165.00 },
+            { id: 'hut-2', name: 'Mast Guide Wear Pad Set (UHMWPE)', supplier: 'YWH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 6, unitPrice: 85.00 },
+            { id: 'hut-3', name: 'Hydraulic Pilot Filter Element', supplier: 'Inventory', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 110.00 },
+            { id: 'hut-4', name: 'Auto-Greasing Cartridge & Line Fittings', supplier: 'SLH', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 45.00 },
+            { id: 'hut-5', name: 'Hutte Rod Manipulator Gripper Jaw', supplier: 'YWH', allocation: 'Site', category: 'Corrective Maintainance', defaultQty: 2, unitPrice: 400.00 },
+            { id: 'hut-6', name: 'Double Clamp Holder Cylinder & Pin', supplier: 'YWH', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1250.00 },
+            { id: 'hut-7', name: 'Drifter Rotary Gearbox Bearing Set', supplier: 'Kianho', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1680.00 },
+            { id: 'hut-8', name: 'Control Console Joystick & Boot Replacement', supplier: 'D&G', allocation: 'Site', category: 'Property Damage', defaultQty: 1, unitPrice: 640.00 },
+            { id: 'hut-9', name: 'Side Canopy Cover & Latch Assembly', supplier: 'Chuan Teng', allocation: 'Yard', category: 'Property Damage', defaultQty: 1, unitPrice: 520.00 },
+            { id: 'hut-10', name: 'M5 Datalogger Pressure Transducer Kit', supplier: 'Keller Elec', allocation: 'Yard', category: 'Modification', defaultQty: 2, unitPrice: 390.00 },
+            { id: 'hut-11', name: 'Aux Hydraulic Diverter Valve Retrofit', supplier: 'Hydro', allocation: 'Yard', category: 'Modification', defaultQty: 1, unitPrice: 880.00 }
+          ],
+          presets: [
+            { code: 'Hutte P1', title: 'Mast & Hydraulic Service Kit', category: 'Preventive Maintainance', priority: 'P2', partIds: ['hut-1', 'hut-2', 'hut-3', 'hut-4'] },
+            { code: 'Hutte P2', title: 'Rod Manipulator & Clamp Overhaul', category: 'Corrective Maintainance', priority: 'P1', partIds: ['hut-5', 'hut-6', 'hut-7', 'hut-2'] },
+            { code: 'Hutte P3', title: 'Datalogger & Valve Retrofit', category: 'Modification', priority: 'P3', partIds: ['hut-10', 'hut-11', 'hut-3'] }
+          ]
+        },
+        XCMG: {
+          parts: [
+            { id: 'xcmg-1', name: 'XCMG Kelly Bar Shock Absorber Spring', supplier: 'YWH', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 190.00 },
+            { id: 'xcmg-2', name: 'Main Winch Wire Rope (32mm Non-Rotating)', supplier: 'Kianon', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 1, unitPrice: 1450.00 },
+            { id: 'xcmg-3', name: 'Rotary Drive Oil Cooler & Filter Pack', supplier: 'Inventory', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 1, unitPrice: 420.00 },
+            { id: 'xcmg-4', name: 'Track Roller & Idler Seal Assembly', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 135.00 },
+            { id: 'xcmg-5', name: 'Crowd Cylinder Piston & Seal Overhaul', supplier: 'Hydro', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1920.00 },
+            { id: 'xcmg-6', name: 'Rotary Drive Planet Gear & Bearing Set', supplier: 'Kianho', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 2450.00 },
+            { id: 'xcmg-7', name: 'Depth Encoder & Proximity Sensor Module', supplier: 'Keller Elec', allocation: 'Site', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 680.00 },
+            { id: 'xcmg-8', name: 'Cab Tempered Glass & Wiper Motor Kit', supplier: 'Chuan Teng', allocation: 'Site', category: 'Property Damage', defaultQty: 1, unitPrice: 790.00 },
+            { id: 'xcmg-9', name: 'Rear Counterweight Guard Rail Repair', supplier: 'YWH', allocation: 'Yard', category: 'Property Damage', defaultQty: 1, unitPrice: 550.00 },
+            { id: 'xcmg-10', name: 'Casing Oscillator Hydraulic Coupler Mod', supplier: 'Hydro', allocation: 'Site', category: 'Modification', defaultQty: 2, unitPrice: 460.00 },
+            { id: 'xcmg-11', name: 'External Emergency Stop & Beacon Wiring', supplier: 'Keller Elec', allocation: 'Yard', category: 'Modification', defaultQty: 1, unitPrice: 310.00 }
+          ],
+          presets: [
+            { code: 'XCMG P1', title: 'Preventive Undercarriage & Kelly Service', category: 'Preventive Maintainance', priority: 'P2', partIds: ['xcmg-1', 'xcmg-2', 'xcmg-3', 'xcmg-4'] },
+            { code: 'XCMG P2', title: 'Rotary Drive & Crowd Cylinder Rebuild', category: 'Corrective Maintainance', priority: 'P1', partIds: ['xcmg-5', 'xcmg-6', 'xcmg-7', 'xcmg-1', 'xcmg-3'] },
+            { code: 'XCMG P3', title: 'Safety Beacon & Oscillator Mod', category: 'Modification', priority: 'P3', partIds: ['xcmg-10', 'xcmg-11', 'xcmg-7'] }
+          ]
+        }
+      };
+
+      function classifyCategory(text) {
+        const t = String(text || '').toLowerCase();
+        if (/mod|retrofit|upgrade|convert|fabrication/.test(t)) return 'Modification';
+        if (/damage|broken|bent|crack|leakage|collision/.test(t)) return 'Property Damage';
+        if (/service|maintenance|seal|filter|oil|bearing|chain|grease/.test(t)) return 'Preventive Maintainance';
+        return 'Corrective Maintainance';
+      }
+
+      // ==========================================
+      // 3. Main Unified Application
+      // ==========================================
+      function App() {
+        const [isHydrated, setIsHydrated] = useState(false);
+        const [activeTab, setActiveTab] = useState('ESTIMATOR'); // 'ESTIMATOR' | 'CONSOLIDATION'
+
+        // --- Previous Consolidation & Audit States ---
+        const [partsData, setPartsData] = useState([]);
+        const [uploadedFiles, setUploadedFiles] = useState([]);
+        const [auditReports, setAuditReports] = useState([]);
+        const [searchQuery, setSearchQuery] = useState('');
+        const [ledgerViewMode, setLedgerViewMode] = useState('SUMMARY');
+
+        // --- Machine Dropdown, Presets & End Order Sheet Form States ---
+        const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
+        const [selectedMachine, setSelectedMachine] = useState('C6');
+        const [activeCategoryFilter, setActiveCategoryFilter] = useState('ALL');
+
+        // Official End Order Header Metadata (Matches ASE-OE-FM-1013-SGP)
+        const [orderMeta, setOrderMeta] = useState({
+          estNumber: 'EST-2026-001',
+          date: new Date().toISOString().slice(0, 10),
+          lastSite: 'J101',
+          equipmentModel: 'C6XP2',
+          engineHour: '',
+          unitNumber: 'C6-02',
+          workOrderNo: '14956',
+          problem: 'Routine mast bearing, chain & hydraulic seal overhaul prior to mobilisation',
+          startDate: new Date().toISOString().slice(0, 10),
+          finishDate: '',
+          category: 'Preventive Maintainance',
+          priority: 'P2',
+          preparedBy: 'Workshop Maintenance Team',
+          approvedBy: ''
+        });
+
+        const [estRows, setEstRows] = useState([
+          { rowId: 1, partId: 'c6-1', customPartName: '', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', qty: 4, unitPrice: 70.00 },
+          { rowId: 2, partId: 'c6-2', customPartName: '', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', qty: 2, unitPrice: 350.00 },
+          { rowId: 3, partId: 'c6-6', customPartName: '', supplier: 'Kianon', allocation: 'Site', category: 'Corrective Maintainance', qty: 1, unitPrice: 480.00 }
+        ]);
+
+        const [savedEstimations, setSavedEstimations] = useState([]);
+        const [newPresetCode, setNewPresetCode] = useState('');
+        const [newPresetCategory, setNewPresetCategory] = useState('Preventive Maintainance');
+
+        // Add New Part to Machine Library Modal/Bar
+        const [showAddLibPart, setShowAddLibPart] = useState(false);
+        const [libPartForm, setLibPartForm] = useState({
+          name: '',
+          supplier: 'YWH',
+          allocation: 'Yard',
+          category: 'Preventive Maintainance',
+          defaultQty: 1,
+          unitPrice: 0
+        });
+
+        const [toast, setToast] = useState('');
+        const triggerToast = (msg) => {
+          setToast(msg);
+          setTimeout(() => setToast(''), 3500);
+        };
+
+        // Hydrate from IndexedDB on load/refresh
+        useEffect(() => {
+          (async () => {
+            try {
+              const saved = await dbGet('unified_state_v4');
+              if (saved) {
+                if (Array.isArray(saved.partsData)) setPartsData(saved.partsData);
+                if (Array.isArray(saved.uploadedFiles)) setUploadedFiles(saved.uploadedFiles);
+                if (Array.isArray(saved.auditReports)) setAuditReports(saved.auditReports);
+                if (saved.catalog) setCatalog({ ...DEFAULT_CATALOG, ...saved.catalog });
+                if (saved.selectedMachine) setSelectedMachine(saved.selectedMachine);
+                if (saved.orderMeta) setOrderMeta((prev) => ({ ...prev, ...saved.orderMeta }));
+                if (Array.isArray(saved.estRows)) setEstRows(saved.estRows);
+                if (Array.isArray(saved.savedEstimations)) setSavedEstimations(saved.savedEstimations);
+              }
+            } catch (err) {
+              console.error('Hydration error:', err);
+            } finally {
+              setIsHydrated(true);
+            }
+          })();
+        }, []);
+
+        // Auto-save to IndexedDB on every change
+        useEffect(() => {
+          if (!isHydrated) return;
+          dbSet('unified_state_v4', {
+            partsData,
+            uploadedFiles,
+            auditReports,
+            catalog,
+            selectedMachine,
+            orderMeta,
+            estRows,
+            savedEstimations,
+            updatedAt: new Date().toISOString()
+          });
+        }, [isHydrated, partsData, uploadedFiles, auditReports, catalog, selectedMachine, orderMeta, estRows, savedEstimations]);
+
+        const parseMoney = (cell) => {
+          if (!cell) return null;
+          if (typeof cell.v === 'number' && !isNaN(cell.v)) return { val: cell.v };
+          const rawStr = String(cell.w || cell.v || '').trim();
+          if (!rawStr || rawStr === '-' || rawStr === '$-') return null;
+          const cleaned = rawStr.replace(/[^0-9.-]+/g, '');
+          const num = parseFloat(cleaned);
+          return !isNaN(num) ? { val: num } : null;
+        };
+
+        // ==========================================
+        // Multi-Excel Upload: Consolidates Trackers + Learns Parts & New Format Sheets
+        // ==========================================
+        const handleMultiExcelUpload = async (e) => {
+          const files = Array.from(e.target.files || []);
+          if (!files.length) return;
+
+          let newParts = [...partsData];
+          let newFiles = [...uploadedFiles];
+          let newAudits = [...auditReports];
+          const updatedCatalog = JSON.parse(JSON.stringify(catalog));
+
+          for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array', cellFormula: true, cellNF: true });
+
+            // Check if uploaded file is in New Format (Template sheet with Task / Supplier / Site/Yard / Cost)
+            const newFmtSheetName = workbook.SheetNames.find((n) => /^template$/i.test(n.trim()));
+            if (newFmtSheetName && workbook.SheetNames.length === 1) {
+              const sheet = workbook.Sheets[newFmtSheetName];
+              const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+              let loadedTasks = [];
+              let equipName = selectedMachine;
+              let woNum = '';
+
+              for (let r = 0; r < matrix.length; r++) {
+                const rowStr = matrix[r].map((c) => String(c || '').trim());
+                if (rowStr[1] && rowStr[1].startsWith('Equipment/ Model:')) {
+                  const val = rowStr[1].replace('Equipment/ Model:', '').trim();
+                  if (val) equipName = val;
+                }
+                if (rowStr[9] && rowStr[9].startsWith('Work Order')) {
+                  woNum = rowStr[9].replace(/Work\s*Order\s*\/\s*Service\s*No\s*:?/i, '').trim();
+                }
+                if (r >= 13 && r <= 36) {
+                  const taskName = rowStr[1];
+                  const supplier = rowStr[7] || 'YWH';
+                  const alloc = /site/i.test(rowStr[8]) ? 'Site' : 'Yard';
+                  const costVal = parseFloat(String(rowStr[9] || '').replace(/[^0-9.-]+/g, ''));
+                  if (taskName && !isNaN(costVal) && costVal > 0) {
+                    loadedTasks.push({
+                      rowId: loadedTasks.length + 1,
+                      partId: '__CUSTOM__',
+                      customPartName: taskName,
+                      supplier,
+                      allocation: alloc,
+                      category: orderMeta.category,
+                      qty: 1,
+                      unitPrice: costVal
+                    });
+                  }
+                }
+              }
+
+              if (loadedTasks.length > 0) {
+                setEstRows(loadedTasks);
+                setOrderMeta((prev) => ({
+                  ...prev,
+                  equipmentModel: equipName || prev.equipmentModel,
+                  workOrderNo: woNum || prev.workOrderNo
+                }));
+              }
+              newFiles.push({ name: file.name, size: file.size, uploadedAt: new Date().toISOString() });
+              triggerToast('Imported ' + file.name + ' into End Order Sheet builder.');
+              continue;
+            }
+
+            // Otherwise parse standard Multi-Tab Repair Estimation Tracker
+            const summaryTabName = workbook.SheetNames.find((name) =>
+              /repair\s*(estimation\s*)?summary/i.test(name.trim())
+            );
+
+            let summaryEstTotal = 0;
+            let summaryActTotal = 0;
+            const summaryRows = [];
+
+            if (summaryTabName) {
+              const sheet = workbook.Sheets[summaryTabName];
+              const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+              let headerRow = -1;
+              let equipCol = -1, prodCol = -1, woCol = -1, estCol = -1, actCol = -1, statusCol = -1, linkCol = -1;
+
+              for (let r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                  const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+                  const txt = String(cell && cell.v ? cell.v : '').trim().toLowerCase();
+                  if (txt.includes('equipment')) { headerRow = r; equipCol = c; }
+                  if (txt === 'product') prodCol = c;
+                  if (txt.includes('work order')) woCol = c;
+                  if (txt.includes('estimate price') || txt.includes('est. price')) estCol = c;
+                  if (txt.includes('actual price') || txt.includes('actual spent')) actCol = c;
+                  if ((txt.includes('stauts') || txt.includes('status')) && statusCol === -1) statusCol = c;
+                  if (txt.includes('press link') || txt.includes('move forwards')) linkCol = c;
+                }
+                if (headerRow !== -1 && estCol !== -1) break;
+              }
+
+              const maxAllowedCol = linkCol !== -1 ? linkCol : range.e.c;
+              let lastEquip = '', lastProd = '', lastWO = '';
+              const seenSharedGroups = new Set();
+
+              if (headerRow !== -1 && estCol !== -1) {
+                for (let r = headerRow + 1; r <= range.e.r; r++) {
+                  const rowTexts = [];
+                  for (let c = 0; c <= maxAllowedCol; c++) {
+                    const cObj = sheet[XLSX.utils.encode_cell({ r, c })];
+                    const v = String(cObj && cObj.v ? cObj.v : '').trim();
+                    if (v) rowTexts.push(v);
+                  }
+                  if (rowTexts.some((t) => /^total$/i.test(t))) break;
+
+                  const getVal = (col) => {
+                    if (col === -1) return '';
+                    const cObj = sheet[XLSX.utils.encode_cell({ r, col })];
+                    return String(cObj && cObj.v ? cObj.v : '').trim();
+                  };
+
+                  const equipVal = getVal(equipCol);
+                  const prodVal = getVal(prodCol);
+                  const woVal = getVal(woCol);
+                  const statusVal = getVal(statusCol).toLowerCase();
+                  const linkVal = getVal(linkCol);
+
+                  if (equipVal) lastEquip = equipVal;
+                  if (prodVal) lastProd = prodVal;
+                  if (woVal) lastWO = woVal;
+
+                  if (statusVal.includes('not required') || statusVal.includes('discussion')) continue;
+
+                  const estParsed = parseMoney(sheet[XLSX.utils.encode_cell({ r, estCol })]);
+                  const actParsed = actCol !== -1 ? parseMoney(sheet[XLSX.utils.encode_cell({ r, actCol })]) : null;
+
+                  if (estParsed && estParsed.val > 0 && lastEquip) {
+                    const cleanLink = linkVal.replace(/['!A1]/g, '').trim();
+                    const sharedKey = lastWO + '|' + cleanLink + '|' + estParsed.val;
+                    if (cleanLink && lastWO && seenSharedGroups.has(sharedKey)) continue;
+                    if (cleanLink && lastWO) seenSharedGroups.add(sharedKey);
+
+                    summaryEstTotal += estParsed.val;
+                    summaryActTotal += actParsed ? actParsed.val : 0;
+
+                    summaryRows.push({
+                      id: file.name + '-SUM-' + r,
+                      sourceFile: file.name,
+                      isSummaryRow: true,
+                      equipment: lastEquip,
+                      product: lastProd || 'GENERAL',
+                      category: classifyCategory(lastEquip),
+                      description: lastEquip + ' (Master Approved Repair)',
+                      qty: 1,
+                      unitPrice: estParsed.val,
+                      estTotal: estParsed.val,
+                      actualSpent: actParsed ? actParsed.val : 0
+                    });
+                  }
+                }
+              }
+            }
+
+            // Parse Individual Equipment Tabs & Add Parts to Machine Library
+            let tabItemsTotal = 0;
+            workbook.SheetNames.forEach((tabName) => {
+              if (tabName === summaryTabName) return;
+              const sheet = workbook.Sheets[tabName];
+              const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+
+              let headerRow = -1, descCol = -1, supCol = -1, qtyCol = -1, unitCol = -1, totalCol = -1;
+              for (let r = range.s.r; r <= range.e.r; r++) {
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                  const cObj = sheet[XLSX.utils.encode_cell({ r, c })];
+                  const txt = String(cObj && cObj.v ? cObj.v : '').trim().toLowerCase();
+                  if (/description|scope|part|item|details/.test(txt) && descCol === -1) { headerRow = r; descCol = c; }
+                  if (/supplier|vendor/.test(txt) && supCol === -1) supCol = c;
+                  if (/reqd|qty|quantity/.test(txt) && qtyCol === -1) qtyCol = c;
+                  if (/unit\s*rate|unit\s*price|each/.test(txt) && unitCol === -1) unitCol = c;
+                  if (/total|amount/.test(txt) && !/unit/.test(txt) && totalCol === -1) totalCol = c;
+                }
+                if (headerRow !== -1 && descCol !== -1 && (unitCol !== -1 || totalCol !== -1)) break;
+              }
+
+              if (headerRow === -1 || descCol === -1) return;
+
+              const machineKey = tabName.trim();
+              if (!updatedCatalog[machineKey]) {
+                updatedCatalog[machineKey] = { parts: [], presets: [] };
+              }
+              const learnedPartIds = [];
+
+              for (let r = headerRow + 1; r <= range.e.r; r++) {
+                const dObj = sheet[XLSX.utils.encode_cell({ r, descCol })];
+                const desc = String(dObj && dObj.v ? dObj.v : '').trim();
+                if (!desc || /^(sub-?total|total|grand total)/i.test(desc)) continue;
+
+                const supObj = supCol !== -1 ? sheet[XLSX.utils.encode_cell({ r, supCol })] : null;
+                const supplier = String(supObj && supObj.v ? supObj.v : 'YWH').trim() || 'YWH';
+                const qObj = qtyCol !== -1 ? sheet[XLSX.utils.encode_cell({ r, qtyCol })] : null;
+                const rawQty = qObj ? Number(qObj.v) : 1;
+                const qty = !isNaN(rawQty) && rawQty > 0 ? rawQty : 1;
+                const uObj = unitCol !== -1 ? parseMoney(sheet[XLSX.utils.encode_cell({ r, unitCol })]) : null;
+                const tObj = totalCol !== -1 ? parseMoney(sheet[XLSX.utils.encode_cell({ r, totalCol })]) : null;
+
+                const unitPrice = uObj ? uObj.val : (tObj ? tObj.val / qty : 0);
+                const lineTotal = tObj ? tObj.val : unitPrice * qty;
+
+                if (lineTotal > 0) {
+                  tabItemsTotal += lineTotal;
+                  const cat = classifyCategory(desc);
+
+                  newParts.push({
+                    id: file.name + '-' + tabName + '-' + r,
+                    sourceFile: file.name,
+                    isSummaryRow: false,
+                    equipment: machineKey,
+                    product: 'EQUIPMENT',
+                    category: cat,
+                    description: desc,
+                    qty,
+                    unitPrice,
+                    estTotal: lineTotal,
+                    actualSpent: 0
+                  });
+
+                  const partId = machineKey + '-xl-' + r;
+                  if (!updatedCatalog[machineKey].parts.some((p) => p.name === desc)) {
+                    updatedCatalog[machineKey].parts.push({
+                      id: partId,
+                      name: desc,
+                      supplier,
+                      allocation: 'Yard',
+                      category: cat,
+                      defaultQty: qty,
+                      unitPrice: Number(unitPrice.toFixed(2))
+                    });
+                  }
+                  learnedPartIds.push(partId);
+                }
+              }
+
+              if (learnedPartIds.length > 0 && updatedCatalog[machineKey].presets.length === 0) {
+                updatedCatalog[machineKey].presets.push({
+                  code: machineKey + ' P1',
+                  title: 'Excel Imported Package',
+                  category: 'Corrective Maintainance',
+                  priority: 'P2',
+                  partIds: learnedPartIds.slice(0, 8)
+                });
+              }
+            });
+
+            newParts = newParts.concat(summaryRows);
+            newFiles.push({ name: file.name, size: file.size, uploadedAt: new Date().toISOString() });
+            newAudits.push({
+              fileName: file.name,
+              summaryEst: summaryEstTotal,
+              summaryAct: summaryActTotal,
+              tabEst: tabItemsTotal
+            });
+          }
+
+          setPartsData(newParts);
+          setUploadedFiles(newFiles);
+          setAuditReports(newAudits);
+          setCatalog(updatedCatalog);
+          triggerToast('Loaded ' + files.length + ' Excel file(s) & persisted to browser storage.');
+          e.target.value = '';
+        };
+
+        const handleClearAll = async () => {
+          await dbClear();
+          setPartsData([]);
+          setUploadedFiles([]);
+          setAuditReports([]);
+          setSavedEstimations([]);
+          setCatalog(DEFAULT_CATALOG);
+          triggerToast('Cleared all uploaded sheets & reset browser storage.');
+        };
+
+        const handleExportBackup = () => {
+          const blob = new Blob(
+            [JSON.stringify({ partsData, uploadedFiles, auditReports, catalog, orderMeta, estRows, savedEstimations }, null, 2)],
+            { type: 'application/json' }
+          );
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'workshop-repair-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        const handleImportBackup = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          if (parsed.partsData) setPartsData(parsed.partsData);
+          if (parsed.uploadedFiles) setUploadedFiles(parsed.uploadedFiles);
+          if (parsed.auditReports) setAuditReports(parsed.auditReports);
+          if (parsed.catalog) setCatalog({ ...DEFAULT_CATALOG, ...parsed.catalog });
+          if (parsed.orderMeta) setOrderMeta(parsed.orderMeta);
+          if (parsed.estRows) setEstRows(parsed.estRows);
+          if (parsed.savedEstimations) setSavedEstimations(parsed.savedEstimations);
+          triggerToast('Restored workspace from JSON backup.');
+        };
+
+        // ==========================================
+        // Machine Dropdown, Presets &
