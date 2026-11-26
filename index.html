@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workshop Maintenance • Repair Estimation & Cost Hub</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #111827;
+      --input: #060911;
+      --border: #1f2937;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --amber: #f59e0b;
+      --emerald: #10b981;
+      --sky: #38bdf8;
+      --rose: #f43f5e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .container { max-width: 1280px; margin: 0 auto; padding: 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 18px; }
+    .flex-between { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+    .flex-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    @media (max-width: 860px) { .grid-3 { grid-template-columns: 1fr; } }
+
+    h1 { margin: 0; font-size: 19px; font-weight: 700; color: #fff; }
+    h2 { margin: 0 0 4px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--amber); }
+    .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+
+    input, select {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid #374151;
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--amber); }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 9px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-amber { background: var(--amber); color: #090d16; }
+    .btn-emerald { background: #059669; color: #fff; }
+    .btn-sky { background: #0284c7; color: #fff; }
+    .btn-dark { background: #1f2937; color: #e5e7eb; border-color: #374151; }
+    .btn-rose { background: #4c0519; color: #fda4af; border-color: #881337; }
+
+    .nav-tabs { display: flex; flex-wrap: wrap; gap: 8px; background: var(--card); border: 1px solid var(--border); padding: 8px; border-radius: 14px; margin-bottom: 18px; }
+    .nav-tab { padding: 9px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; border: none; background: transparent; color: var(--muted); }
+    .nav-tab.active { background: var(--amber); color: #090d16; }
+
+    .preset-chip {
+      display: inline-flex;
+      align-items: stretch;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .preset-apply-btn {
+      background: transparent;
+      border: none;
+      color: #fff;
+      padding: 9px 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .preset-apply-btn:hover { background: var(--amber); color: #090d16; }
+    .preset-apply-btn .p-code { font-weight: 700; font-size: 13px; }
+    .preset-apply-btn .p-title { font-size: 11px; opacity: 0.85; }
+    .preset-actions {
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #374151;
+    }
+    .preset-icon-btn {
+      flex: 1;
+      background: #161e2e;
+      border: none;
+      color: var(--muted);
+      font-size: 11px;
+      padding: 2px 7px;
+      cursor: pointer;
+    }
+    .preset-icon-btn:hover { background: #374151; color: #fff; }
+    .preset-icon-btn.del:hover { background: #881337; color: #fda4af; }
+
+    .cat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: left; cursor: pointer; color: var(--text); }
+    .cat-card.active { border-color: var(--amber); background: rgba(245, 158, 11, 0.14); }
+    .cat-card .c-val { font-size: 17px; font-weight: 700; margin-top: 4px; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #060911; color: var(--muted); text-transform: uppercase; font-size: 11px; padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    td { padding: 8px 10px; border-bottom: 1px solid #1f2937; vertical-align: middle; }
+    .text-right { text-align: right; }
+    .text-amber { color: var(--amber); font-weight: 700; }
+    .text-emerald { color: var(--emerald); font-weight: 700; }
+    .text-sky { color: var(--sky); font-weight: 700; }
+
+    .toast { position: fixed; bottom: 20px; right: 20px; background: #059669; color: #fff; padding: 11px 16px; border-radius: 10px; font-weight: 600; font-size: 13px; z-index: 9999; }
+    .hidden { display: none !important; }
+
+    #official-print-area { display: none; }
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      body { background: #fff !important; color: #000 !important; }
+      #app-ui { display: none !important; }
+      #official-print-area { display: block !important; width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; }
+      .p-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .p-table td, .p-table th { border: 1px solid #000; padding: 4px 6px; color: #000; background: #fff; }
+      .p-title { font-size: 18px; font-weight: 700; text-align: center; background: #f3f4f6 !important; padding: 8px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .p-hdr { background: #e5e7eb !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .p-chk { background: #fde68a !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div id="official-print-area"></div>
+
+  <div id="app-ui" class="container">
+    <div class="card flex-between">
+      <div>
+        <h1>Workshop Maintenance • Repair Estimation & Cost Hub</h1>
+        <div id="storage-status" class="sub">Ready • Auto-saving locally</div>
+      </div>
+      <div class="flex-wrap">
+        <label class="btn btn-amber" style="margin:0; cursor:pointer;">
+          + Upload Excel Sheets / Trackers
+          <input id="excel-upload-input" type="file" multiple accept=".xlsx,.xls" class="hidden" />
+        </label>
+        <button id="btn-export-json" type="button" class="btn btn-dark">Export Backup (.json)</button>
+        <label class="btn btn-dark" style="margin:0; cursor:pointer;">
+          Restore Backup
+          <input id="json-import-input" type="file" accept=".json" class="hidden" />
+        </label>
+        <button id="btn-clear-all" type="button" class="btn btn-rose">Remove All Sheets</button>
+      </div>
+    </div>
+
+    <div class="nav-tabs">
+      <button id="tab-estimator" type="button" class="nav-tab active">1. Machine Dropdown, Presets & End Order Sheet PDF</button>
+      <button id="tab-consolidation" type="button" class="nav-tab">2. Master Excel Cost Consolidation & Audit</button>
+    </div>
+
+    <!-- VIEW 1 -->
+    <div id="view-estimator">
+      <div class="card grid-3">
+        <div>
+          <h2>1. Machine Type Drop Down</h2>
+          <label for="machine-select">Select Machine (C6, Hutte, XCMG + Imported)</label>
+          <select id="machine-select"></select>
+          <div style="margin-top: 10px;">
+            <button id="btn-toggle-lib-form" type="button" class="btn btn-dark" style="width:100%; justify-content:center; color:#f59e0b;">
+              + Add New Part to Dropdown Library
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex-between">
+            <h2>2. Quick Presets (Click to Auto-Fill Rows)</h2>
+            <span class="sub">Click ✎ to rename preset</span>
+          </div>
+          <div id="preset-buttons-container" class="flex-wrap" style="margin-top: 8px;"></div>
+
+          <!-- Inline Rename Preset Box -->
+          <div id="rename-preset-box" class="flex-wrap hidden" style="margin-top: 10px; padding: 10px; background: #060911; border: 1px solid #f59e0b; border-radius: 10px;">
+            <input id="edit-preset-code" type="text" placeholder="Preset Name (e.g. C6 P1)" style="width: 170px;" />
+            <input id="edit-preset-title" type="text" placeholder="Preset Description" style="width: 230px;" />
+            <button id="btn-confirm-rename-preset" type="button" class="btn btn-amber">Save Name</button>
+            <button id="btn-cancel-rename-preset" type="button" class="btn btn-dark">Cancel</button>
+          </div>
+
+          <!-- Add New Quick Preset Bar -->
+          <div class="flex-wrap" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border);">
+            <input id="new-preset-code" type="text" placeholder="Preset Name (e.g. C6 P4)" style="width: 170px;" />
+            <input id="new-preset-title" type="text" placeholder="Description (e.g. Mast Overhaul)" style="width: 210px;" />
+            <select id="new-preset-cat" style="width: 185px;">
+              <option value="Preventive Maintainance">Preventive Maintainance</option>
+              <option value="Corrective Maintainance">Corrective Maintainance</option>
+              <option value="Property Damage">Property Damage</option>
+              <option value="Modification">Modification</option>
+            </select>
+            <button id="btn-save-preset" type="button" class="btn btn-amber">+ Add New Quick Preset</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="lib-part-card" class="card hidden" style="border-color: rgba(245,158,11,0.5);">
+        <h2>Add New Part Permanently to Selected Machine Library</h2>
+        <div class="grid-4" style="margin-top: 10px;">
+          <div>
+            <label>Part / Component Name</label>
+            <input id="lib-part-name" type="text" placeholder="e.g. Hydraulic Swivel Seal" />
+          </div>
+          <div>
+            <label>Supplier</label>
+            <input id="lib-part-supplier" type="text" value="YWH" />
+          </div>
+          <div>
+            <label>Site / Yard</label>
+            <select id="lib-part-alloc">
+              <option value="Yard">Yard</option>
+              <option value="Site">Site</option>
+            </select>
+          </div>
+          <div>
+            <label>Maintenance Category</label>
+            <select id="lib-part-cat">
+              <option value="Preventive Maintainance">Preventive Maintainance</option>
+              <option value="Corrective Maintainance">Corrective Maintainance</option>
+              <option value="Property Damage">Property Damage</option>
+              <option value="Modification">Modification</option>
+            </select>
+          </div>
+          <div>
+            <label>Default Qty</label>
+            <input id="lib-part-qty" type="number" min="1" value="1" />
+          </div>
+          <div>
+            <label>Unit Price (SGD)</label>
+            <input id="lib-part-price" type="number" step="0.01" placeholder="0.00" />
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button id="btn-save-lib-part" type="button" class="btn btn-amber" style="width:100%; justify-content:center;">Save Part to Library</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="category-cards" class="grid-5" style="margin-bottom: 18px;"></div>
+
+      <div class="card">
+        <div class="flex-between" style="border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 14px;">
+          <div>
+            <h2>End Order Sheet Details (ASE-OE-FM-1013-SGP Rev: 0_2 Oct 2017)</h2>
+            <div class="sub">Fills the official Repair Estimation PDF and Excel export form</div>
+          </div>
+          <span class="sub" style="font-family: monospace;">Form: ASE-OE-FM-1013-SGP</span>
+        </div>
+
+        <div class="grid-4" style="margin-bottom: 14px;">
+          <div><label>Date</label><input id="meta-date" type="date" /></div>
+          <div><label>Work Order / Service No.</label><input id="meta-wo" type="text" /></div>
+          <div><label>Last Site</label><input id="meta-site" type="text" /></div>
+          <div><label>Equipment / Model</label><input id="meta-model" type="text" /></div>
+          <div><label>Engine Hour</label><input id="meta-hours" type="text" placeholder="e.g. 4,520 hrs" /></div>
+          <div><label>Unit Number</label><input id="meta-unit" type="text" /></div>
+          <div>
+            <label>Order Category (Form Checkbox)</label>
+            <select id="meta-cat">
+              <option value="Preventive Maintainance">Preventive Maintainance</option>
+              <option value="Corrective Maintainance">Corrective Maintainance</option>
+              <option value="Property Damage">Property Damage</option>
+              <option value="Modification">Modification</option>
+            </select>
+          </div>
+          <div>
+            <label>Priority (P1 - P4)</label>
+            <select id="meta-priority">
+              <option value="P1">P1 Urgent</option>
+              <option value="P2">P2 - 7 Days</option>
+              <option value="P3">P3 7-30 Days</option>
+              <option value="P4">P4 30-60 Days</option>
+            </select>
+          </div>
+          <div style="grid-column: span 2;"><label>Problem / Scope Summary</label><input id="meta-problem" type="text" /></div>
+          <div><label>Start Date</label><input id="meta-start" type="date" /></div>
+          <div><label>Finish Date</label><input id="meta-finish" type="date" /></div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:65px;">Row</th>
+                <th>Part Drop Down / Extra Item</th>
+                <th style="width:130px;">Supplier</th>
+                <th style="width:105px;">Site/Yard</th>
+                <th class="text-right" style="width:80px;">Qty</th>
+                <th class="text-right" style="width:110px;">Unit Price</th>
+                <th class="text-right" style="width:120px;">Cost (SGD)</th>
+                <th style="width:45px;"></th>
+              </tr>
+            </thead>
+            <tbody id="est-rows-tbody"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6" class="text-right sub">Total Cost Pertaining to Site (SGD)</td>
+                <td id="foot-site-total" class="text-right text-sky">$0.00</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td colspan="6" class="text-right sub">Total Cost Pertaining to Yard (SGD)</td>
+                <td id="foot-yard-total" class="text-right text-emerald">$0.00</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td colspan="6" class="text-right" style="font-weight:700;">GRAND TOTAL COST (SGD)</td>
+                <td id="foot-grand-total" class="text-right text-amber" style="font-size:15px;">$0.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="grid-2" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
+          <div><label>Prepared by:</label><input id="meta-prepared" type="text" /></div>
+          <div><label>Approved by (HOD / Management):</label><input id="meta-approved" type="text" placeholder="Leave blank for physical signature or enter name" /></div>
+        </div>
+
+        <div class="flex-between" style="margin-top: 14px;">
+          <button id="btn-add-row" type="button" class="btn btn-dark">+ Add Next Part Row</button>
+          <div class="flex-wrap">
+            <button id="btn-save-est" type="button" class="btn btn-sky">Save Record (<span id="est-ref-label">EST-2026-001</span>)</button>
+            <button id="btn-export-xlsx" type="button" class="btn btn-dark" style="color:#10b981;">Download End Order Excel (.xlsx)</button>
+            <button id="btn-print-pdf" type="button" class="btn btn-emerald">Print / Save End Order PDF</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="saved-est-card" class="card hidden">
+        <h2>Saved Past Estimation Records (Click to Load & Update)</h2>
+        <div id="saved-est-list" class="flex-wrap" style="margin-top: 8px;"></div>
+      </div>
+    </div>
+
+    <!-- VIEW 2 -->
+    <div id="view-consolidation" class="hidden">
+      <div class="grid-4" style="margin-bottom: 18px;">
+        <div class="card" style="margin:0;"><div class="sub">MASTER EST. COST (SGD)</div><div id="kpi-est" class="text-amber" style="font-size:22px; margin-top:4px;">$0.00</div></div>
+        <div class="card" style="margin:0;"><div class="sub">ACTUAL SPENT (SGD)</div><div id="kpi-act" class="text-emerald" style="font-size:22px; margin-top:4px;">$0.00</div></div>
+        <div class="card" style="margin:0;"><div class="sub">REMAINING BALANCE</div><div id="kpi-rem" class="text-sky" style="font-size:22px; margin-top:4px;">$0.00</div></div>
+        <div class="card" style="margin:0;"><div class="sub">INDEXED COMPONENT QTY</div><div id="kpi-qty" style="font-size:22px; font-weight:700; margin-top:4px;">0</div></div>
+      </div>
+
+      <div id="audit-list" style="margin-bottom: 18px;"></div>
+
+      <div class="card flex-between">
+        <div class="flex-wrap">
+          <button id="btn-view-summary" type="button" class="btn btn-amber">Repair Summary (1:1)</button>
+          <button id="btn-view-parts" type="button" class="btn btn-dark">All Receipt Parts</button>
+        </div>
+        <input id="ledger-search" type="text" placeholder="Search equipment, part description, or file..." style="max-width: 320px;" />
+      </div>
+
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div class="table-wrap" style="border:none;">
+          <table>
+            <thead>
+              <tr>
+                <th>Source File</th>
+                <th>Equipment / Tab</th>
+                <th>Description</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Unit Price</th>
+                <th class="text-right">Est. Total</th>
+                <th class="text-right">Actual Spent</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-box" class="toast hidden"></div>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = 'KellerWorkshopHub_v6';
+
+      var CATEGORIES = [
+        'Preventive Maintainance',
+        'Corrective Maintainance',
+        'Property Damage',
+        'Modification'
+      ];
+
+      var DEFAULT_CATALOG = {
+        C6: {
+          parts: [
+            { id: 'c6-1', name: 'Sliding Bearing (Mast Assembly)', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 70.00 },
+            { id: 'c6-2', name: 'Mast Chain (SLH Heavy Duty)', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 350.00 },
+            { id: 'c6-3', name: 'Hydraulic Oil Seal Kit (TE 70x90x10)', supplier: 'Hydro', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 38.00 },
+            { id: 'c6-4', name: 'Return Filter & O-Ring Service Set', supplier: 'Inventory', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 1, unitPrice: 145.00 },
+            { id: 'c6-5', name: 'Rotary Head Bearing & Octagon Shaft', supplier: 'YWH', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1850.00 },
+            { id: 'c6-6', name: 'Wire Rope Winch Cable (26mm)', supplier: 'Kianon', allocation: 'Site', category: 'Corrective Maintainance', defaultQty: 2, unitPrice: 480.00 },
+            { id: 'c6-7', name: 'T20 EP Rotary Compression Spring', supplier: 'YWH', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 4, unitPrice: 95.00 },
+            { id: 'c6-8', name: 'Remote Control Transmitter Housing', supplier: 'D&G', allocation: 'Site', category: 'Property Damage', defaultQty: 1, unitPrice: 752.00 },
+            { id: 'c6-9', name: 'Hydraulic Hose Guard & Clamp Bracket', supplier: 'YWH', allocation: 'Site', category: 'Property Damage', defaultQty: 3, unitPrice: 120.00 },
+            { id: 'c6-10', name: 'Preventer Jaw Clamp (Hardened 4140)', supplier: 'YWH', allocation: 'Site', category: 'Modification', defaultQty: 2, unitPrice: 410.00 },
+            { id: 'c6-11', name: 'Auxiliary Sensor Wiring Harness Mod', supplier: 'Keller Elec', allocation: 'Yard', category: 'Modification', defaultQty: 1, unitPrice: 320.00 }
+          ],
+          presets: [
+            { code: 'C6 P1', title: 'Standard Mast & Seal Service', category: 'Preventive Maintainance', priority: 'P2', partIds: ['c6-1', 'c6-2', 'c6-3', 'c6-4'] },
+            { code: 'C6 P2', title: 'Rotary & Winch Overhaul', category: 'Corrective Maintainance', priority: 'P1', partIds: ['c6-5', 'c6-6', 'c6-7', 'c6-1'] },
+            { code: 'C6 P3', title: 'Full Yard Re-Mobilisation Package', category: 'Modification', priority: 'P3', partIds: ['c6-1', 'c6-2', 'c6-3', 'c6-5', 'c6-6', 'c6-10', 'c6-11'] }
+          ]
+        },
+        Hutte: {
+          parts: [
+            { id: 'hut-1', name: 'Hutte Feed Cylinder Seal Kit', supplier: 'Hydro', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 165.00 },
+            { id: 'hut-2', name: 'Mast Guide Wear Pad Set (UHMWPE)', supplier: 'YWH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 6, unitPrice: 85.00 },
+            { id: 'hut-3', name: 'Hydraulic Pilot Filter Element', supplier: 'Inventory', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 2, unitPrice: 110.00 },
+            { id: 'hut-4', name: 'Auto-Greasing Cartridge & Line Fittings', supplier: 'SLH', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 45.00 },
+            { id: 'hut-5', name: 'Hutte Rod Manipulator Gripper Jaw', supplier: 'YWH', allocation: 'Site', category: 'Corrective Maintainance', defaultQty: 2, unitPrice: 400.00 },
+            { id: 'hut-6', name: 'Double Clamp Holder Cylinder & Pin', supplier: 'YWH', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1250.00 },
+            { id: 'hut-7', name: 'Drifter Rotary Gearbox Bearing Set', supplier: 'Kianho', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1680.00 },
+            { id: 'hut-8', name: 'Control Console Joystick & Boot Replacement', supplier: 'D&G', allocation: 'Site', category: 'Property Damage', defaultQty: 1, unitPrice: 640.00 },
+            { id: 'hut-9', name: 'Side Canopy Cover & Latch Assembly', supplier: 'Chuan Teng', allocation: 'Yard', category: 'Property Damage', defaultQty: 1, unitPrice: 520.00 },
+            { id: 'hut-10', name: 'M5 Datalogger Pressure Transducer Kit', supplier: 'Keller Elec', allocation: 'Yard', category: 'Modification', defaultQty: 2, unitPrice: 390.00 },
+            { id: 'hut-11', name: 'Aux Hydraulic Diverter Valve Retrofit', supplier: 'Hydro', allocation: 'Yard', category: 'Modification', defaultQty: 1, unitPrice: 880.00 }
+          ],
+          presets: [
+            { code: 'Hutte P1', title: 'Mast & Hydraulic Service Kit', category: 'Preventive Maintainance', priority: 'P2', partIds: ['hut-1', 'hut-2', 'hut-3', 'hut-4'] },
+            { code: 'Hutte P2', title: 'Rod Manipulator & Clamp Overhaul', category: 'Corrective Maintainance', priority: 'P1', partIds: ['hut-5', 'hut-6', 'hut-7', 'hut-2'] },
+            { code: 'Hutte P3', title: 'Datalogger & Valve Retrofit', category: 'Modification', priority: 'P3', partIds: ['hut-10', 'hut-11', 'hut-3'] }
+          ]
+        },
+        XCMG: {
+          parts: [
+            { id: 'xcmg-1', name: 'XCMG Kelly Bar Shock Absorber Spring', supplier: 'YWH', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 190.00 },
+            { id: 'xcmg-2', name: 'Main Winch Wire Rope (32mm Non-Rotating)', supplier: 'Kianon', allocation: 'Site', category: 'Preventive Maintainance', defaultQty: 1, unitPrice: 1450.00 },
+            { id: 'xcmg-3', name: 'Rotary Drive Oil Cooler & Filter Pack', supplier: 'Inventory', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 1, unitPrice: 420.00 },
+            { id: 'xcmg-4', name: 'Track Roller & Idler Seal Assembly', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', defaultQty: 4, unitPrice: 135.00 },
+            { id: 'xcmg-5', name: 'Crowd Cylinder Piston & Seal Overhaul', supplier: 'Hydro', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 1920.00 },
+            { id: 'xcmg-6', name: 'Rotary Drive Planet Gear & Bearing Set', supplier: 'Kianho', allocation: 'Yard', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 2450.00 },
+            { id: 'xcmg-7', name: 'Depth Encoder & Proximity Sensor Module', supplier: 'Keller Elec', allocation: 'Site', category: 'Corrective Maintainance', defaultQty: 1, unitPrice: 680.00 },
+            { id: 'xcmg-8', name: 'Cab Tempered Glass & Wiper Motor Kit', supplier: 'Chuan Teng', allocation: 'Site', category: 'Property Damage', defaultQty: 1, unitPrice: 790.00 },
+            { id: 'xcmg-9', name: 'Rear Counterweight Guard Rail Repair', supplier: 'YWH', allocation: 'Yard', category: 'Property Damage', defaultQty: 1, unitPrice: 550.00 },
+            { id: 'xcmg-10', name: 'Casing Oscillator Hydraulic Coupler Mod', supplier: 'Hydro', allocation: 'Site', category: 'Modification', defaultQty: 2, unitPrice: 460.00 },
+            { id: 'xcmg-11', name: 'External Emergency Stop & Beacon Wiring', supplier: 'Keller Elec', allocation: 'Yard', category: 'Modification', defaultQty: 1, unitPrice: 310.00 }
+          ],
+          presets: [
+            { code: 'XCMG P1', title: 'Preventive Undercarriage & Kelly Service', category: 'Preventive Maintainance', priority: 'P2', partIds: ['xcmg-1', 'xcmg-2', 'xcmg-3', 'xcmg-4'] },
+            { code: 'XCMG P2', title: 'Rotary Drive & Crowd Cylinder Rebuild', category: 'Corrective Maintainance', priority: 'P1', partIds: ['xcmg-5', 'xcmg-6', 'xcmg-7', 'xcmg-1', 'xcmg-3'] },
+            { code: 'XCMG P3', title: 'Safety Beacon & Oscillator Mod', category: 'Modification', priority: 'P3', partIds: ['xcmg-10', 'xcmg-11', 'xcmg-7'] }
+          ]
+        }
+      };
+
+      var editingPresetIdx = -1;
+
+      var state = {
+        activeTab: 'ESTIMATOR',
+        catalog: JSON.parse(JSON.stringify(DEFAULT_CATALOG)),
+        selectedMachine: 'C6',
+        activeCatFilter: 'ALL',
+        orderMeta: {
+          estNumber: 'EST-2026-001',
+          date: new Date().toISOString().slice(0, 10),
+          lastSite: 'J101',
+          equipmentModel: 'C6XP2',
+          engineHour: '',
+          unitNumber: 'C6-02',
+          workOrderNo: '14956',
+          problem: 'Routine mast bearing, chain & hydraulic seal overhaul prior to mobilisation',
+          startDate: new Date().toISOString().slice(0, 10),
+          finishDate: '',
+          category: 'Preventive Maintainance',
+          priority: 'P2',
+          preparedBy: 'Workshop Maintenance Team',
+          approvedBy: ''
+        },
+        estRows: [
+          { rowId: 1, partId: 'c6-1', customName: '', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', qty: 4, unitPrice: 70.00 },
+          { rowId: 2, partId: 'c6-2', customName: '', supplier: 'SLH', allocation: 'Yard', category: 'Preventive Maintainance', qty: 2, unitPrice: 350.00 },
+          { rowId: 3, partId: 'c6-6', customName: '', supplier: 'Kianon', allocation: 'Site', category: 'Corrective Maintainance', qty: 1, unitPrice: 480.00 }
+        ],
+        savedEstimations: [],
+        partsData: [],
+        uploadedFiles: [],
+        auditReports: [],
+        ledgerViewMode: 'SUMMARY',
+        searchQuery: ''
+      };
+
+      try {
+        var raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            state = Object.assign({}, state, parsed);
+            state.catalog = Object.assign({}, JSON.parse(JSON.stringify(DEFAULT_CATALOG)), parsed.catalog || {});
+            state.orderMeta = Object.assign({}, state.orderMeta, parsed.orderMeta || {});
+          }
+        }
+      } catch (e) {}
+
+      function saveState() {
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {}
+      }
+
+      function $(id) { return document.getElementById(id); }
+      function fmt(n) {
+        return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function showToast(msg) {
+        var box = $('toast-box');
+        box.textContent = msg;
+        box.classList.remove('hidden');
+        clearTimeout(box._t);
+        box._t = setTimeout(function () { box.classList.add('hidden'); }, 3200);
+      }
+
+      function ensureXLSX(callback) {
+        if (window.XLSX) return callback(window.XLSX);
+        showToast('Loading Excel engine...');
+        var s = document.createElement('script');
+        s.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+        s.onload = function () { callback(window.XLSX); };
+        s.onerror = function () { showToast('Network blocked SheetJS CDN. Use JSON backup or Print PDF.'); };
+        document.head.appendChild(s);
+      }
+
+      function classifyCategory(text) {
+        var t = String(text || '').toLowerCase();
+        if (/mod|retrofit|upgrade|convert|fabrication/.test(t)) return 'Modification';
+        if (/damage|broken|bent|crack|leakage|collision/.test(t)) return 'Property Damage';
+        if (/service|maintenance|seal|filter|oil|bearing|chain|grease/.test(t)) return 'Preventive Maintainance';
+        return 'Corrective Maintainance';
+      }
+
+      function resolveDesc(row) {
+        if (row.partId === '__CUSTOM__') return (row.customName || '').trim();
+        var machine = state.catalog[state.selectedMachine] || { parts: [] };
+        var found = machine.parts.find(function (p) { return p.id === row.partId; });
+        return found ? found.name : '';
+      }
+
+      function renderPrintSheet() {
+        var m = state.orderMeta;
+        var siteTotal = 0, yardTotal = 0;
+        var lines = [];
+
+        state.estRows.forEach(function (r) {
+          var desc = resolveDesc(r);
+          if (!desc) return;
+          var qty = Number(r.qty) || 1;
+          var unit = Number(r.unitPrice) || 0;
+          var cost = qty * unit;
+          if (r.allocation === 'Site') siteTotal += cost;
+          else yardTotal += cost;
+          lines.push({
+            desc: qty > 1 ? desc + ' (Qty: ' + qty + ' x ' + fmt(unit) + ')' : desc,
+            supplier: r.supplier || '-',
+            alloc: r.allocation || 'Yard',
+            cost: cost
+          });
+        });
+
+        while (lines.length < 18) lines.push(null);
+
+        var rowsHtml = lines.map(function (item, i) {
+          if (!item) return '<tr style="height:21px;"><td colspan="4"></td><td></td><td></td><td></td></tr>';
+          return '<tr>' +
+            '<td colspan="4">' + (i + 1) + '. ' + item.desc + '</td>' +
+            '<td style="text-align:center;">' + item.supplier + '</td>' +
+            '<td style="text-align:center;">' + item.alloc + '</td>' +
+            '<td style="text-align:right;font-weight:700;">' + fmt(item.cost) + '</td>' +
+          '</tr>';
+        }).join('');
+
+        $('official-print-area').innerHTML =
+          '<table class="p-table">' +
+            '<colgroup><col style="width:16%"><col style="width:16%"><col style="width:15%"><col style="width:14%"><col style="width:11%"><col style="width:13%"><col style="width:15%"></colgroup>' +
+            '<tr><td colspan="7" class="p-title">Repair Estimation</td></tr>' +
+            '<tr>' +
+              '<td colspan="4"><strong>Date : </strong>' + m.date + '</td>' +
+              '<td class="p-hdr" style="text-align:center;">Engine Hour</td>' +
+              '<td class="p-hdr" style="text-align:center;">Unit Number</td>' +
+              '<td class="p-hdr" style="text-align:center;">Work Order / Service No</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<td colspan="4"><strong>Last Site : </strong>' + m.lastSite + '</td>' +
+              '<td rowspan="3" style="text-align:center;font-weight:700;">' + (m.engineHour || '-') + '</td>' +
+              '<td rowspan="3" style="text-align:center;font-weight:700;">' + (m.unitNumber || '-') + '</td>' +
+              '<td rowspan="3" style="text-align:center;font-weight:700;">' + (m.workOrderNo || m.estNumber) + '</td>' +
+            '</tr>' +
+            '<tr><td colspan="4"><strong>Equipment / Model : </strong>' + (m.equipmentModel || state.selectedMachine) + '</td></tr>' +
+            '<tr><td colspan="4"><strong>Problem : </strong>' + m.problem + '</td></tr>' +
+            '<tr><td colspan="7"><strong>Start : </strong>' + (m.startDate || '____________') + '        <strong>Finish : </strong>' + (m.finishDate || '____________') + '</td></tr>' +
+            '<tr>' +
+              '<td colspan="3" class="p-hdr" style="text-align:center;">Category</td>' +
+              '<td rowspan="2" class="p-hdr" style="text-align:center;">Priority</td>' +
+              '<td rowspan="2" class="' + (m.priority === 'P1' ? 'p-chk' : '') + '" style="text-align:center;">' + (m.priority === 'P1' ? '[X]' : '[ ]') + ' P1 Urgent</td>' +
+              '<td rowspan="2" class="' + (m.priority === 'P2' ? 'p-chk' : '') + '" style="text-align:center;">' + (m.priority === 'P2' ? '[X]' : '[ ]') + ' P2 (-7 Days)</td>' +
+              '<td rowspan="2" class="' + (m.priority === 'P3' || m.priority === 'P4' ? 'p-chk' : '') + '" style="text-align:center;">' + (m.priority === 'P3' ? '[X] P3 7-30 Days' : m.priority === 'P4' ? '[X] P4 30-60 Days' : '[ ] P3 / P4') + '</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<td class="' + (m.category === 'Preventive Maintainance' ? 'p-chk' : '') + '" style="text-align:center;">' + (m.category === 'Preventive Maintainance' ? '[X]' : '[ ]') + ' Preventive Maintainance</td>' +
+              '<td class="' + (m.category === 'Corrective Maintainance' ? 'p-chk' : '') + '" style="text-align:center;">' + (m.category === 'Corrective Maintainance' ? '[X]' : '[ ]') + ' Corrective Maintainance</td>' +
+              '<td class="' + (m.category === 'Property Damage' || m.category === 'Modification' ? 'p-chk' : '') + '" style="text-align:center;">' + (m.category === 'Modification' ? '[X] Modification' : m.category === 'Property Damage' ? '[X] Property Damage' : '[ ] Damage / Mod') + '</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<th colspan="4" class="p-hdr" style="text-align:left;">Task / Parts Description</th>' +
+              '<th class="p-hdr" style="text-align:center;">Supplier</th>' +
+              '<th class="p-hdr" style="text-align:center;">Site/Yard</th>' +
+              '<th class="p-hdr" style="text-align:right;">Cost (SGD)</th>' +
+            '</tr>' +
+            rowsHtml +
+            '<tr><td colspan="6" style="text-align:right;font-weight:700;">Total Cost Pertaining to Site (SGD)</td><td style="text-align:right;font-weight:700;">' + fmt(siteTotal) + '</td></tr>' +
+            '<tr><td colspan="6" style="text-align:right;font-weight:700;">Total Cost Pertaining to Yard (SGD)</td><td style="text-align:right;font-weight:700;">' + fmt(yardTotal) + '</td></tr>' +
+            '<tr><td colspan="6" class="p-hdr" style="text-align:right;">Grand Total Cost (SGD)</td><td class="p-hdr" style="text-align:right;">' + fmt(siteTotal + yardTotal) + '</td></tr>' +
+            '<tr><td colspan="3"><strong>Prepared by: </strong>' + m.preparedBy + '</td><td colspan="4"><strong>Approved by: </strong>' + m.approvedBy + '</td></tr>' +
+            '<tr><td colspan="3" style="height:34px;"><strong>Signature: </strong></td><td colspan="4" style="height:34px;"><strong>Signature: </strong></td></tr>' +
+            '<tr><td colspan="7" style="border:none;padding-top:6px;font-size:9px;font-weight:700;">ASE-OE-FM-1013-SGP  Rev: 0_2 Oct 2017</td></tr>' +
+          '</table>';
+      }
+
+      function render() {
+        var machineKeys = Object.keys(state.catalog);
+        var curMachine = state.catalog[state.selectedMachine] || { parts: [], presets: [] };
+
+        $('storage-status').textContent = 'Ready • ' + state.uploadedFiles.length + ' Excel tracker(s) loaded, ' + machineKeys.length + ' machines in library';
+
+        $('tab-estimator').className = 'nav-tab ' + (state.activeTab === 'ESTIMATOR' ? 'active' : '');
+        $('tab-consolidation').className = 'nav-tab ' + (state.activeTab === 'CONSOLIDATION' ? 'active' : '');
+        $('tab-consolidation').textContent = '2. Master Excel Cost Consolidation & Audit (' + state.uploadedFiles.length + ' Files)';
+        $('view-estimator').classList.toggle('hidden', state.activeTab !== 'ESTIMATOR');
+        $('view-consolidation').classList.toggle('hidden', state.activeTab !== 'CONSOLIDATION');
+
+        $('machine-select').innerHTML = machineKeys.map(function (m) {
+          return '<option value="' + m + '" ' + (m === state.selectedMachine ? 'selected' : '') + '>' + m + '</option>';
+        }).join('');
+
+        // Quick Presets WITHOUT () bracket numbers + Rename & Delete buttons
+        $('preset-buttons-container').innerHTML = curMachine.presets.length === 0
+          ? '<span class="sub">No presets saved for ' + state.selectedMachine + ' yet.</span>'
+          : curMachine.presets.map(function (p, idx) {
+              return '<div class="preset-chip">' +
+                '<button type="button" class="preset-apply-btn" data-preset-idx="' + idx + '">' +
+                  '<div class="p-code">' + p.code + '</div>' +
+                  '<div class="p-title">' + (p.title || p.category) + '</div>' +
+                '</button>' +
+                '<div class="preset-actions">' +
+                  '<button type="button" class="preset-icon-btn" title="Rename Preset" data-rename-preset-idx="' + idx + '">✎</button>' +
+                  '<button type="button" class="preset-icon-btn del" title="Delete Preset" data-del-preset-idx="' + idx + '">✕</button>' +
+                '</div>' +
+              '</div>';
+            }).join('');
+
+        $('meta-date').value = state.orderMeta.date || '';
+        $('meta-wo').value = state.orderMeta.workOrderNo || '';
+        $('meta-site').value = state.orderMeta.lastSite || '';
+        $('meta-model').value = state.orderMeta.equipmentModel || '';
+        $('meta-hours').value = state.orderMeta.engineHour || '';
+        $('meta-unit').value = state.orderMeta.unitNumber || '';
+        $('meta-cat').value = state.orderMeta.category || 'Preventive Maintainance';
+        $('meta-priority').value = state.orderMeta.priority || 'P2';
+        $('meta-problem').value = state.orderMeta.problem || '';
+        $('meta-start').value = state.orderMeta.startDate || '';
+        $('meta-finish').value = state.orderMeta.finishDate || '';
+        $('meta-prepared').value = state.orderMeta.preparedBy || '';
+        $('meta-approved').value = state.orderMeta.approvedBy || '';
+        $('est-ref-label').textContent = state.orderMeta.estNumber;
+
+        var siteTotal = 0, yardTotal = 0;
+        var catTotals = {};
+        CATEGORIES.forEach(function (c) { catTotals[c] = 0; });
+
+        state.estRows.forEach(function (r) {
+          var line = (Number(r.qty) || 0) * (Number(r.unitPrice) || 0);
+          if (r.allocation === 'Site') siteTotal += line;
+          else yardTotal += line;
+          catTotals[r.category] = (catTotals[r.category] || 0) + line;
+        });
+
+        var grandTotal = siteTotal + yardTotal;
+        $('foot-site-total').textContent = fmt(siteTotal);
+        $('foot-yard-total').textContent = fmt(yardTotal);
+        $('foot-grand-total').textContent = fmt(grandTotal);
+
+        $('category-cards').innerHTML =
+          '<div class="cat-card ' + (state.activeCatFilter === 'ALL' ? 'active' : '') + '" data-cat="ALL">' +
+            '<div class="sub">Grand Total (Site + Yard)</div>' +
+            '<div class="c-val text-amber">' + fmt(grandTotal) + '</div>' +
+          '</div>' +
+          CATEGORIES.map(function (c) {
+            return '<div class="cat-card ' + (state.activeCatFilter === c ? 'active' : '') + '" data-cat="' + c + '">' +
+              '<div class="sub">' + c + '</div>' +
+              '<div class="c-val">' + fmt(catTotals[c] || 0) + '</div>' +
+            '</div>';
+          }).join('');
+
+        var availableParts = state.activeCatFilter === 'ALL'
+          ? curMachine.parts
+          : curMachine.parts.filter(function (p) { return p.category === state.activeCatFilter; });
+
+        $('est-rows-tbody').innerHTML = state.estRows.map(function (row, idx) {
+          var lineTotal = (Number(row.qty) || 0) * (Number(row.unitPrice) || 0);
+          var opts = availableParts.map(function (p) {
+            return '<option value="' + p.id + '" ' + (p.id === row.partId ? 'selected' : '') + '>' + p.name + ' (' + fmt(p.unitPrice) + ')</option>';
+          }).join('');
+
+          return '<tr>' +
+            '<td class="sub">Row ' + (idx + 1) + '</td>' +
+            '<td>' +
+              '<select data-row-part="' + row.rowId + '">' +
+                '<option value="">-- Select ' + state.selectedMachine + ' Row ' + (idx + 1) + ' Part --</option>' +
+                opts +
+                '<option value="__CUSTOM__" ' + (row.partId === '__CUSTOM__' ? 'selected' : '') + '>+ Manual Extra Part / Custom Task...</option>' +
+              '</select>' +
+              (row.partId === '__CUSTOM__'
+                ? '<input type="text" data-row-custom="' + row.rowId + '" value="' + (row.customName || '').replace(/"/g, '"') + '" placeholder="Enter custom part or task description..." style="margin-top:6px; border-color:#f59e0b;" />'
+                : '') +
+            '</td>' +
+            '<td><input type="text" data-row-sup="' + row.rowId + '" value="' + (row.supplier || '').replace(/"/g, '"') + '" /></td>' +
+            '<td><select data-row-alloc="' + row.rowId + '"><option value="Yard" ' + (row.allocation === 'Yard' ? 'selected' : '') + '>Yard</option><option value="Site" ' + (row.allocation === 'Site' ? 'selected' : '') + '>Site</option></select></td>' +
+            '<td><input type="number" min="1" class="text-right" data-row-qty="' + row.rowId + '" value="' + row.qty + '" /></td>' +
+            '<td><input type="number" step="0.01" class="text-right" data-row-price="' + row.rowId + '" value="' + row.unitPrice + '" /></td>' +
+            '<td class="text-right text-amber">' + fmt(lineTotal) + '</td>' +
+            '<td style="text-align:center;"><button type="button" class="btn btn-rose" style="padding:4px 8px;" data-row-del="' + row.rowId + '">X</button></td>' +
+          '</tr>';
+        }).join('');
+
+        $('saved-est-card').classList.toggle('hidden', state.savedEstimations.length === 0);
+        $('saved-est-list').innerHTML = state.savedEstimations.map(function (rec, idx) {
+          return '<button type="button" class="btn btn-dark" data-load-est="' + idx + '"><span class="text-amber">' + rec.estNumber + '</span> • ' + rec.machine + ' • ' + fmt(rec.total) + '</button>';
+        }).join('');
+
+        var summaryItems = state.partsData.filter(function (p) { return p.isSummaryRow; });
+        var cEst = summaryItems.reduce(function (a, b) { return a + b.estTotal; }, 0);
+        var cAct = summaryItems.reduce(function (a, b) { return a + b.actualSpent; }, 0);
+        var cQty = state.partsData.filter(function (p) { return !p.isSummaryRow; }).reduce(function (a, b) { return a + b.qty; }, 0);
+
+        $('kpi-est').textContent = fmt(cEst);
+        $('kpi-act').textContent = fmt(cAct);
+        $('kpi-rem').textContent = fmt(cEst - cAct);
+        $('kpi-qty').textContent = cQty.toLocaleString();
+
+        $('audit-list').innerHTML = state.auditReports.map(function (rep) {
+          return '<div class="card flex-between" style="padding:10px 14px; margin-bottom:8px;">' +
+            '<span class="text-amber">' + rep.fileName + '</span>' +
+            '<div class="flex-wrap" style="font-size:12px;">' +
+              '<span>Summary Est: <strong>' + fmt(rep.summaryEst) + '</strong></span>' +
+              '<span>Summary Spent: <strong class="text-emerald">' + fmt(rep.summaryAct) + '</strong></span>' +
+              '<span>Receipt Tabs Total: <strong>' + fmt(rep.tabEst) + '</strong></span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+        $('btn-view-summary').className = 'btn ' + (state.ledgerViewMode === 'SUMMARY' ? 'btn-amber' : 'btn-dark');
+        $('btn-view-parts').className = 'btn ' + (state.ledgerViewMode === 'PARTS' ? 'btn-amber' : 'btn-dark');
+
+        var q = state.searchQuery.toLowerCase().trim();
+        var filtered = state.partsData.filter(function (item) {
+          if (state.ledgerViewMode === 'SUMMARY' && !item.isSummaryRow) return false;
+          if (state.ledgerViewMode === 'PARTS' && item.isSummaryRow) return false;
+          if (q) {
+            return item.equipment.toLowerCase().includes(q) ||
+                   item.description.toLowerCase().includes(q) ||
+                   item.sourceFile.toLowerCase().includes(q);
+          }
+          return true;
+        });
+
+        $('ledger-tbody').innerHTML = filtered.length === 0
+          ? '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--muted);">No records loaded. Upload your Excel trackers above to view consolidated costs.</td></tr>'
+          : filtered.map(function (r) {
+              return '<tr>' +
+                '<td class="sub">' + r.sourceFile + '</td>' +
+                '<td style="font-weight:600;">' + r.equipment + '</td>' +
+                '<td>' + r.description + '</td>' +
+                '<td class="text-right">' + r.qty + '</td>' +
+                '<td class="text-right">' + fmt(r.unitPrice) + '</td>' +
+                '<td class="text-right text-amber">' + fmt(r.estTotal) + '</td>' +
+                '<td class="text-right text-emerald">' + fmt(r.actualSpent) + '</td>' +
+              '</tr>';
+            }).join('');
+
+        renderPrintSheet();
+        saveState();
+      }
+
+      document.addEventListener('click', function (e) {
+        var t = e.target.closest('button, .cat-card');
+        if (!t) return;
+
+        if (t.id === 'tab-estimator') { state.activeTab = 'ESTIMATOR'; render(); }
+        if (t.id === 'tab-consolidation') { state.activeTab = 'CONSOLIDATION'; render(); }
+        if (t.id === 'btn-toggle-lib-form') { $('lib-part-card').classList.toggle('hidden'); }
+
+        if (t.id === 'btn-save-lib-part') {
+          var name = $('lib-part-name').value.trim();
+          var price = Number($('lib-part-price').value);
+          if (!name || price <= 0) return showToast('Enter a valid part name and unit price.');
+          state.catalog[state.selectedMachine].parts.push({
+            id: state.selectedMachine.toLowerCase() + '-lib-' + Date.now(),
+            name: name,
+            supplier: $('lib-part-supplier').value.trim() || 'YWH',
+            allocation: $('lib-part-alloc').value,
+            category: $('lib-part-cat').value,
+            defaultQty: Number($('lib-part-qty').value) || 1,
+            unitPrice: price
+          });
+          $('lib-part-name').value = '';
+          $('lib-part-price').value = '';
+          $('lib-part-card').classList.add('hidden');
+          showToast('Added "' + name + '" to ' + state.selectedMachine + ' library.');
+          render();
+        }
+
+        // Apply Quick Preset (supports both library part IDs and custom saved rows)
+        if (t.dataset.presetIdx !== undefined) {
+          var cur = state.catalog[state.selectedMachine];
+          var preset = cur.presets[Number(t.dataset.presetIdx)];
+          if (preset) {
+            if (Array.isArray(preset.savedRows) && preset.savedRows.length > 0) {
+              state.estRows = preset.savedRows.map(function (r, idx) {
+                return Object.assign({}, r, { rowId: idx + 1 });
+              });
+            } else {
+              state.estRows = preset.partIds.map(function (pid, idx) {
+                var p = cur.parts.find(function (x) { return x.id === pid; });
+                return p ? {
+                  rowId: idx + 1,
+                  partId: p.id,
+                  customName: '',
+                  supplier: p.supplier || 'YWH',
+                  allocation: p.allocation || 'Yard',
+                  category: p.category,
+                  qty: p.defaultQty || 1,
+                  unitPrice: p.unitPrice || 0
+                } : null;
+              }).filter(Boolean);
+            }
+            state.orderMeta.category = preset.category || state.orderMeta.category;
+            state.orderMeta.priority = preset.priority || state.orderMeta.priority;
+            showToast('Applied ' + preset.code);
+            render();
+          }
+        }
+
+        // Open Rename Preset Box
+        if (t.dataset.renamePresetIdx !== undefined) {
+          editingPresetIdx = Number(t.dataset.renamePresetIdx);
+          var pObj = state.catalog[state.selectedMachine].presets[editingPresetIdx];
+          if (pObj) {
+            $('edit-preset-code').value = pObj.code || '';
+            $('edit-preset-title').value = pObj.title || '';
+            $('rename-preset-box').classList.remove('hidden');
+            $('edit-preset-code').focus();
+          }
+        }
+
+        // Confirm Preset Rename
+        if (t.id === 'btn-confirm-rename-preset') {
+          var newCode = $('edit-preset-code').value.trim();
+          var newTitle = $('edit-preset-title').value.trim();
+          if (!newCode) return showToast('Enter a preset name.');
+          var targetP = state.catalog[state.selectedMachine].presets[editingPresetIdx];
+          if (targetP) {
+            targetP.code = newCode;
+            targetP.title = newTitle || targetP.title;
+            showToast('Renamed preset to ' + newCode);
+          }
+          editingPresetIdx = -1;
+          $('rename-preset-box').classList.add('hidden');
+          render();
+        }
+
+        if (t.id === 'btn-cancel-rename-preset') {
+          editingPresetIdx = -1;
+          $('rename-preset-box').classList.add('hidden');
+        }
+
+        // Delete Quick Preset
+        if (t.dataset.delPresetIdx !== undefined) {
+          var delIdx = Number(t.dataset.delPresetIdx);
+          state.catalog[state.selectedMachine].presets.splice(delIdx, 1);
+          showToast('Removed preset.');
+          render();
+        }
+
+        // Add New Quick Preset (saves both library rows and custom rows)
+        if (t.id === 'btn-save-preset') {
+          var code = $('new-preset-code').value.trim();
+          var title = $('new-preset-title').value.trim();
+          var cat = $('new-preset-cat').value;
+          var validRows = state.estRows.filter(function (r) { return resolveDesc(r); });
+          if (!code || !validRows.length) return showToast('Enter a preset name and select at least 1 part row.');
+          var ids = validRows.map(function (r) { return r.partId; }).filter(function (id) { return id && id !== '__CUSTOM__'; });
+          state.catalog[state.selectedMachine].presets.push({
+            code: code,
+            title: title || (cat + ' Package'),
+            category: cat,
+            priority: state.orderMeta.priority,
+            partIds: ids,
+            savedRows: JSON.parse(JSON.stringify(validRows))
+          });
+          $('new-preset-code').value = '';
+          $('new-preset-title').value = '';
+          showToast('Added new quick preset: ' + code);
+          render();
+        }
+
+        if (t.dataset.cat) { state.activeCatFilter = t.dataset.cat; render(); }
+
+        if (t.id === 'btn-add-row') {
+          var nextId = state.estRows.length ? Math.max.apply(null, state.estRows.map(function (r) { return r.rowId; })) + 1 : 1;
+          state.estRows.push({
+            rowId: nextId,
+            partId: '',
+            customName: '',
+            supplier: 'YWH',
+            allocation: 'Yard',
+            category: state.activeCatFilter === 'ALL' ? state.orderMeta.category : state.activeCatFilter,
+            qty: 1,
+            unitPrice: 0
+          });
+          render();
+        }
+
+        if (t.dataset.rowDel) {
+          var id = Number(t.dataset.rowDel);
+          state.estRows = state.estRows.filter(function (r) { return r.rowId !== id; });
+          render();
+        }
+
+        if (t.id === 'btn-save-est') {
+          var valid = state.estRows.filter(function (r) { return resolveDesc(r); });
+          if (!valid.length) return showToast('Select at least 1 part before saving.');
+          var total = valid.reduce(function (s, r) { return s + (Number(r.qty) || 0) * (Number(r.unitPrice) || 0); }, 0);
+          var rec = {
+            estNumber: state.orderMeta.estNumber,
+            machine: state.selectedMachine,
+            orderMeta: JSON.parse(JSON.stringify(state.orderMeta)),
+            rows: JSON.parse(JSON.stringify(valid)),
+            total: total
+          };
+          state.savedEstimations = [rec].concat(state.savedEstimations.filter(function (x) { return x.estNumber !== rec.estNumber; }));
+          var match = state.orderMeta.estNumber.match(/^(.*?)(\d+)$/);
+          if (match) {
+            var nextNum = String(Number(match[2]) + 1);
+            while (nextNum.length < match[2].length) nextNum = '0' + nextNum;
+            state.orderMeta.estNumber = match[1] + nextNum;
+          }
+          showToast('Saved ' + rec.estNumber + ' (' + fmt(total) + ')');
+          render();
+        }
+
+        if (t.dataset.loadEst !== undefined) {
+          var loaded = state.savedEstimations[Number(t.dataset.loadEst)];
+          if (loaded) {
+            state.selectedMachine = loaded.machine;
+            state.orderMeta = JSON.parse(JSON.stringify(loaded.orderMeta));
+            state.estRows = JSON.parse(JSON.stringify(loaded.rows));
+            showToast('Loaded ' + loaded.estNumber);
+            render();
+          }
+        }
+
+        if (t.id === 'btn-print-pdf') {
+          renderPrintSheet();
+          window.print();
+        }
+
+        if (t.id === 'btn-export-xlsx') {
+          ensureXLSX(function (XLSX) {
+            var m = state.orderMeta;
+            var siteTotal = 0, yardTotal = 0;
+            var aoa = [
+              [],
+              ['', 'Repair Estimation'],
+              [],
+              [],
+              ['', 'Date : ' + m.date, '', '', '', '', 'Engine Hour: ' + m.engineHour, 'Unit Number: ' + m.unitNumber, '', 'Work Order / Service No: ' + m.workOrderNo],
+              ['', 'Last Site: ' + m.lastSite],
+              ['', 'Equipment/ Model: ' + m.equipmentModel],
+              ['', 'Problem: ' + m.problem],
+              [],
+              ['', 'Start : ' + m.startDate + '          Finish : ' + m.finishDate],
+              ['', 'Category', '', '', '', 'Priority', '', m.priority === 'P1' ? '[X] P1 Urgent' : 'P1 Urgent', m.priority === 'P2' ? '[X] P2 (-7 Days)' : 'P2 (-7 Days)', m.priority === 'P3' ? '[X] P3 7-30 Days' : 'P3 7-30 Days', m.priority === 'P4' ? '[X] P4 30-60 Days' : 'P4 30-60 Days'],
+              [
+                '',
+                m.category === 'Preventive Maintainance' ? '[X] Preventive Maintainance' : 'Preventive Maintainance',
+                m.category === 'Corrective Maintainance' ? '[X] Corrective Maintainance' : 'Corrective Maintainance',
+                m.category === 'Property Damage' ? '[X] Property Damage' : 'Property Damage',
+                m.category === 'Modification' ? '[X] Modification' : 'Modification'
+              ],
+              ['', 'Task', '', '', '', '', '', 'Supplier', 'Site/Yard', 'Cost (SGD)']
+            ];
+
+            state.estRows.forEach(function (r) {
+              var desc = resolveDesc(r);
+              if (!desc) return;
+              var qty = Number(r.qty) || 1;
+              var unit = Number(r.unitPrice) || 0;
+              var cost = qty * unit;
+              if (r.allocation === 'Site') siteTotal += cost;
+              else yardTotal += cost;
+              aoa.push(['', qty > 1 ? desc + ' (Qty: ' + qty + ' @ $' + unit.toFixed(2) + ')' : desc, '', '', '', '', '', r.supplier || 'YWH', r.allocation || 'Yard', cost]);
+            });
+
+            aoa.push([]);
+            aoa.push(['', 'Total Cost Pertaining to Site (SGD)', '', '', '', '', '', '', '', siteTotal]);
+            aoa.push(['', 'Total Cost Pertaining to Yard (SGD)', '', '', '', '', '', '', '', yardTotal]);
+            aoa.push(['', 'Grand Total Cost (SGD)', '', '', '', '', '', '', '', siteTotal + yardTotal]);
+            aoa.push([]);
+            aoa.push(['', 'Prepared by: ' + m.preparedBy, '', '', '', '', 'Approved by: ' + m.approvedBy]);
+            aoa.push(['', 'Signature: ', '', '', '', '', 'Signature: ']);
+            aoa.push([]);
+            aoa.push(['', 'ASE-OE-FM-1013-SGP  Rev: 0_2 Oct 2017']);
+
+            var ws = XLSX.utils.aoa_to_sheet(aoa);
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Template');
+            XLSX.writeFile(wb, 'Repair_Estimation_' + (m.workOrderNo || m.estNumber) + '_' + state.selectedMachine + '.xlsx');
+          });
+        }
+
+        if (t.id === 'btn-export-json') {
+          var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'workshop-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+
+        if (t.id === 'btn-clear-all') {
+          state.partsData = [];
+          state.uploadedFiles = [];
+          state.auditReports = [];
+          state.savedEstimations = [];
+          state.catalog = JSON.parse(JSON.stringify(DEFAULT_CATALOG));
+          showToast('Cleared uploaded trackers & reset library.');
+          render();
+        }
+
+        if (t.id === 'btn-view-summary') { state.ledgerViewMode = 'SUMMARY'; render(); }
+        if (t.id === 'btn-view-parts') { state.ledgerViewMode = 'PARTS'; render(); }
+      });
+
+      document.addEventListener('change', function (e) {
+        var el = e.target;
+        if (el.id === 'machine-select') {
+          state.selectedMachine = el.value;
+          state.activeCatFilter = 'ALL';
+          state.orderMeta.equipmentModel = el.value;
+          editingPresetIdx = -1;
+          $('rename-preset-box').classList.add('hidden');
+          state.estRows = [
+            { rowId: 1, partId: '', customName: '', supplier: 'YWH', allocation: 'Yard', category: 'Preventive Maintainance', qty: 1, unitPrice: 0 },
+            { rowId: 2, partId: '', customName: '', supplier: 'YWH', allocation: 'Site', category: 'Corrective Maintainance', qty: 1, unitPrice: 0 }
+          ];
+          render();
+        }
+        if (el.dataset.rowPart) {
+          var id = Number(el.dataset.rowPart);
+          var val = el.value;
+          var row = state.estRows.find(function (r) { return r.rowId === id; });
+          if (!row) return;
+          if (val === '__CUSTOM__') {
+            row.partId = '__CUSTOM__';
+            row.customName = '';
+            row.unitPrice = 0;
+          } else {
+            var parts = (state.catalog[state.selectedMachine] && state.catalog[state.selectedMachine].parts) || [];
+            var p = parts.find(function (x) { return x.id === val; });
+            row.partId = val;
+            if (p) {
+              row.supplier = p.supplier || 'YWH';
+              row.allocation = p.allocation || 'Yard';
+              row.category = p.category;
+              row.qty = p.defaultQty || 1;
+              row.unitPrice = p.unitPrice || 0;
+            }
+          }
+          render();
+        }
+        if (el.dataset.rowAlloc) {
+          var rAlloc = state.estRows.find(function (r) { return r.rowId === Number(el.dataset.rowAlloc); });
+          if (rAlloc) { rAlloc.allocation = el.value; render(); }
+        }
+        if (el.id === 'meta-cat') { state.orderMeta.category = el.value; render(); }
+        if (el.id === 'meta-priority') { state.orderMeta.priority = el.value; render(); }
+      });
+
+      document.addEventListener('input', function (e) {
+        var el = e.target;
+        if (el.id === 'meta-date') state.orderMeta.date = el.value;
+        if (el.id === 'meta-wo') state.orderMeta.workOrderNo = el.value;
+        if (el.id === 'meta-site') state.orderMeta.lastSite = el.value;
+        if (el.id === 'meta-model') state.orderMeta.equipmentModel = el.value;
+        if (el.id === 'meta-hours') state.orderMeta.engineHour = el.value;
+        if (el.id === 'meta-unit') state.orderMeta.unitNumber = el.value;
+        if (el.id === 'meta-problem') state.orderMeta.problem = el.value;
+        if (el.id === 'meta-start') state.orderMeta.startDate = el.value;
+        if (el.id === 'meta-finish') state.orderMeta.finishDate = el.value;
+        if (el.id === 'meta-prepared') state.orderMeta.preparedBy = el.value;
+        if (el.id === 'meta-approved') state.orderMeta.approvedBy = el.value;
+        if (el.id === 'ledger-search') { state.searchQuery = el.value; render(); }
+
+        if (el.dataset.rowCustom) {
+          var rc = state.estRows.find(function (r) { return r.rowId === Number(el.dataset.rowCustom); });
+          if (rc) { rc.customName = el.value; renderPrintSheet(); saveState(); }
+        }
+        if (el.dataset.rowSup) {
+          var rs = state.estRows.find(function (r) { return r.rowId === Number(el.dataset.rowSup); });
+          if (rs) { rs.supplier = el.value; renderPrintSheet(); saveState(); }
+        }
+        if (el.dataset.rowQty) {
+          var rq = state.estRows.find(function (r) { return r.rowId === Number(el.dataset.rowQty); });
+          if (rq) { rq.qty = Number(el.value); render(); }
+        }
+        if (el.dataset.rowPrice) {
+          var rp = state.estRows.find(function (r) { return r.rowId === Number(el.dataset.rowPrice); });
+          if (rp) { rp.unitPrice = Number(el.value); render(); }
+        }
+      });
+
+      $('excel-upload-input').addEventListener('change', function (e) {
+        var files = Array.prototype.slice.call(e.target.files || []);
+        if (!files.length) return;
+        ensureXLSX(function (XLSX) {
+          var idx = 0;
+          function nextFile() {
+            if (idx >= files.length) {
+              showToast('Loaded ' + files.length + ' Excel file(s).');
+              e.target.value = '';
+              render();
+              return;
+            }
+            var file = files[idx++];
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+              var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellFormula: true, cellNF: true });
+              var summaryTab = wb.SheetNames.find(function (n) { return /repair\s*(estimation\s*)?summary/i.test(n.trim()); });
+              var summaryEst = 0, summaryAct = 0;
+
+              if (summaryTab) {
+                var sheet = wb.Sheets[summaryTab];
+                var range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+                var hRow = -1, eqCol = -1, woCol = -1, estCol = -1, actCol = -1, stCol = -1, lkCol = -1;
+
+                for (var r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
+                  for (var c = range.s.c; c <= range.e.c; c++) {
+                    var cell = sheet[XLSX.utils.encode_cell({ r: r, c: c })];
+                    var txt = String(cell && cell.v ? cell.v : '').trim().toLowerCase();
+                    if (txt.indexOf('equipment') !== -1) { hRow = r; eqCol = c; }
+                    if (txt.indexOf('work order') !== -1) woCol = c;
+                    if (txt.indexOf('estimate price') !== -1 || txt.indexOf('est. price') !== -1) estCol = c;
+                    if (txt.indexOf('actual price') !== -1 || txt.indexOf('actual spent') !== -1) actCol = c;
+                    if ((txt.indexOf('stauts') !== -1 || txt.indexOf('status') !== -1) && stCol === -1) stCol = c;
+                    if (txt.indexOf('press link') !== -1 || txt.indexOf('move forwards') !== -1) lkCol = c;
+                  }
+                  if (hRow !== -1 && estCol !== -1) break;
+                }
+
+                var maxCol = lkCol !== -1 ? lkCol : range.e.c;
+                var lastEq = '', lastWO = '';
+                var seen = {};
+
+                if (hRow !== -1 && estCol !== -1) {
+                  for (var r2 = hRow + 1; r2 <= range.e.r; r2++) {
+                    var isEnd = false;
+                    for (var c2 = 0; c2 <= maxCol; c2++) {
+                      var cObj = sheet[XLSX.utils.encode_cell({ r: r2, c: c2 })];
+                      if (/^total$/i.test(String(cObj && cObj.v ? cObj.v : '').trim())) isEnd = true;
+                    }
+                    if (isEnd) break;
+
+                    var eqC = eqCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r2, c: eqCol })] : null;
+                    var woC = woCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r2, c: woCol })] : null;
+                    var stC = stCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r2, c: stCol })] : null;
+                    var lkC = lkCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r2, c: lkCol })] : null;
+
+                    var eq = String(eqC && eqC.v ? eqC.v : '').trim();
+                    var wo = String(woC && woC.v ? woC.v : '').trim();
+                    var st = String(stC && stC.v ? stC.v : '').trim().toLowerCase();
+                    var lk = String(lkC && lkC.v ? lkC.v : '').trim();
+
+                    if (eq) lastEq = eq;
+                    if (wo) lastWO = wo;
+                    if (st.indexOf('not required') !== -1 || st.indexOf('discussion') !== -1) continue;
+
+                    var eCell = sheet[XLSX.utils.encode_cell({ r: r2, c: estCol })];
+                    var aCell = actCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r2, c: actCol })] : null;
+                    var eVal = Number(eCell && eCell.v);
+                    var aVal = Number(aCell && aCell.v);
+
+                    if (!isNaN(eVal) && eVal > 0 && lastEq) {
+                      var key = lastWO + '|' + lk.replace(/['!A1]/g, '') + '|' + eVal;
+                      if (lk && lastWO && seen[key]) continue;
+                      if (lk && lastWO) seen[key] = true;
+
+                      summaryEst += eVal;
+                      summaryAct += !isNaN(aVal) ? aVal : 0;
+                      state.partsData.push({
+                        sourceFile: file.name,
+                        isSummaryRow: true,
+                        equipment: lastEq,
+                        description: lastEq + ' (Master Approved Repair)',
+                        qty: 1,
+                        unitPrice: eVal,
+                        estTotal: eVal,
+                        actualSpent: !isNaN(aVal) ? aVal : 0
+                      });
+                    }
+                  }
+                }
+              }
+
+              var tabTotal = 0;
+              wb.SheetNames.forEach(function (tab) {
+                if (tab === summaryTab) return;
+                var sheet = wb.Sheets[tab];
+                var range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+                var hRow = -1, dCol = -1, sCol = -1, qCol = -1, uCol = -1, tCol = -1;
+
+                for (var r = range.s.r; r <= range.e.r; r++) {
+                  for (var c = range.s.c; c <= range.e.c; c++) {
+                    var cell = sheet[XLSX.utils.encode_cell({ r: r, c: c })];
+                    var txt = String(cell && cell.v ? cell.v : '').trim().toLowerCase();
+                    if (/description|scope|part|item|task/.test(txt) && dCol === -1) { hRow = r; dCol = c; }
+                    if (/supplier|vendor/.test(txt) && sCol === -1) sCol = c;
+                    if (/reqd|qty|quantity/.test(txt) && qCol === -1) qCol = c;
+                    if (/unit\s*rate|unit\s*price|each/.test(txt) && uCol === -1) uCol = c;
+                    if (/total|amount|cost/.test(txt) && !/unit/.test(txt) && tCol === -1) tCol = c;
+                  }
+                  if (hRow !== -1 && dCol !== -1 && (uCol !== -1 || tCol !== -1)) break;
+                }
+
+                if (hRow === -1 || dCol === -1) return;
+                var mKey = tab.trim();
+                if (!state.catalog[mKey]) state.catalog[mKey] = { parts: [], presets: [] };
+                var ids = [];
+
+                for (var r3 = hRow + 1; r3 <= range.e.r; r3++) {
+                  var dCell = sheet[XLSX.utils.encode_cell({ r: r3, c: dCol })];
+                  var desc = String(dCell && dCell.v ? dCell.v : '').trim();
+                  if (!desc || /^(sub-?total|total|grand total)/i.test(desc)) continue;
+                  var sCell = sCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r3, c: sCol })] : null;
+                  var sup = String(sCell && sCell.v ? sCell.v : 'YWH').trim();
+                  var qCell = qCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r3, c: qCol })] : null;
+                  var qRaw = qCell ? Number(qCell.v) : 1;
+                  var qty = !isNaN(qRaw) && qRaw > 0 ? qRaw : 1;
+                  var uCell = uCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r3, c: uCol })] : null;
+                  var tCell = tCol !== -1 ? sheet[XLSX.utils.encode_cell({ r: r3, c: tCol })] : null;
+                  var uRaw = uCell ? Number(uCell.v) : NaN;
+                  var tRaw = tCell ? Number(tCell.v) : NaN;
+                  var unit = !isNaN(uRaw) && uRaw > 0 ? uRaw : (!isNaN(tRaw) && tRaw > 0 ? tRaw / qty : 0);
+                  var line = !isNaN(tRaw) && tRaw > 0 ? tRaw : unit * qty;
+
+                  if (line > 0) {
+                    tabTotal += line;
+                    state.partsData.push({
+                      sourceFile: file.name,
+                      isSummaryRow: false,
+                      equipment: mKey,
+                      description: desc,
+                      qty: qty,
+                      unitPrice: unit,
+                      estTotal: line,
+                      actualSpent: 0
+                    });
+                    var pid = mKey + '-xl-' + r3;
+                    if (!state.catalog[mKey].parts.some(function (p) { return p.name === desc; })) {
+                      state.catalog[mKey].parts.push({
+                        id: pid,
+                        name: desc,
+                        supplier: sup || 'YWH',
+                        allocation: 'Yard',
+                        category: classifyCategory(desc),
+                        defaultQty: qty,
+                        unitPrice: Number(unit.toFixed(2))
+                      });
+                    }
+                    ids.push(pid);
+                  }
+                }
+
+                if (ids.length && !state.catalog[mKey].presets.length) {
+                  state.catalog[mKey].presets.push({
+                    code: mKey + ' P1',
+                    title: 'Imported Excel Package',
+                    category: 'Corrective Maintainance',
+                    priority: 'P2',
+                    partIds: ids.slice(0, 8)
+                  });
+                }
+              });
+
+              state.uploadedFiles.push({ name: file.name });
+              state.auditReports.push({ fileName: file.name, summaryEst: summaryEst, summaryAct: summaryAct, tabEst: tabTotal });
+              nextFile();
+            };
+            reader.readAsArrayBuffer(file);
+          }
+          nextFile();
+        });
+      });
+
+      $('json-import-input').addEventListener('change', function (e) {
+        var f = e.target.files && e.target.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          var parsed = JSON.parse(ev.target.result);
+          state = Object.assign({}, state, parsed);
+          state.catalog = Object.assign({}, JSON.parse(JSON.stringify(DEFAULT_CATALOG)), parsed.catalog || {});
+          showToast('Workspace restored from backup.');
+          render();
+        };
+        reader.readAsText(f);
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
